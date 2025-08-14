@@ -1,8 +1,8 @@
-# Logoff all accounts (except JJ Moss) if they are in a 'disconnected' state (IE the user forgot to logoff)
+# Logoff all accounts (except first.last) if they are in a 'disconnected' state (IE the user forgot to logoff)
 
 try {
-    ## Find all sessions matching the specified username
-    $sessions = quser | Where-Object {$_ -notmatch '\bjj\.moss\b'}
+    ## Find all sessions NOT matching the specified username
+    $sessions = quser | Where-Object {$_ -notmatch '\bfirst\.last\b'}
     ## Initialize an array to hold session IDs
     $sessionIds = @()
     ## Parse the session IDs from the output
