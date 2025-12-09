@@ -1,5 +1,5 @@
 <#PSScriptInfo
-.VERSION        1.5.0
+.VERSION        1.5.1
 .GUID           5c94b55a-0b1a-4302-8f5e-9b5d9c6f6f1f
 .AUTHOR         Scott Brescia
 .COMPANYNAME    Monolith
@@ -9,6 +9,7 @@
 .REQUIREDSCRIPTS
 .EXTERNALSCRIPTDEPENDENCIES
 .RELEASENOTES
+1.5.1  - Update how $emailedUsers are handled to improve resiliency, improve logfile readability with JSON character adjustment
 1.5.0  - Moved SSC API credentials to Azure Key Vault accessed via Managed Identity; added #requires Az.KeyVault; updated docs for KV usage and config.
 1.4.0  - Added immediate SS disable if AD account is disabled; exponential backoff when disabling SS users; safer Bcc handling.
 1.3.0  - Added per-domain inactivity window (e.g., *@cdw.com 30 days vs others 90 days) and notification period (14 days).
@@ -131,8 +132,8 @@ $LoginDaysAgo = (Get-Date).AddDays(-90)
 $LoginDaysAgoCDW = (Get-Date).AddDays(-30)
 
 # Bcc email addresses
-$BccEmails = "scott.brescia@monolith-corp.com"
-$BccEmailsCDW = "scott.brescia@monolith-corp.com;Nicki.Morse@cdw.com"
+$BccEmails = "itteam@monolith-corp.com"
+$BccEmailsCDW = "itteam@monolith-corp.com;Nicki.Morse@cdw.com"
 
 
 # --- Log Analytics Compatible Logging ---
@@ -151,6 +152,13 @@ function Write-LogAnalyticsLog {
         $logObj[$key] = $Properties[$key]
     }
     $json = $logObj | ConvertTo-Json -Compress
+	
+	# Unescape common HTML-safe sequences for readability
+    $json = $json -replace '\\u0027', "'" `
+                   -replace '\\u003c', '<' `
+                   -replace '\\u003e', '>' `
+                   -replace '\\u0026', '&'
+
     Add-Content -Path $logFile -Value $json
 }
 
@@ -295,7 +303,7 @@ $filteredUsers = $allUsers | Where-Object {
     $lastLogin = $null
     try {
         $lastLogin = Get-Date $_.lastLogin
-        ($lastLogin -lt $LoginDaysAgo -and $_.userName -ne "DelineaWorkloadService" -and $_.userName -ne "Primarily1677" -and $_.userName -ne "APIUser" -and $_.userName -ne "cloudadmin@monolith-corp" -and $_.enabled -eq $true) -or ($lastLogin -lt $LoginDaysAgoCDW -and $_.emailAddress -like "*@cdw.com" -and $_.enabled -eq $true)
+        ($lastLogin -lt $LoginDaysAgo -and $_.userName -ne "DelineaWorkloadService" -and $_.userName -ne "Primarily1677" -and $_.userName -ne "APIUser" -and $_.userName -ne "cloudadmin@monolith-corp" -and $_.userName -ne "DelineaITDRService" -and $_.enabled -eq $true) -or ($lastLogin -lt $LoginDaysAgoCDW -and $_.emailAddress -like "*@cdw.com" -and $_.enabled -eq $true)
     } catch {
         Write-LogAnalyticsLog -Level "Error" -Message "Failed to parse last login date for user '$($_.userName)': $_"
         $false
@@ -332,7 +340,7 @@ foreach ($user in $allUsers) {
 	}
 }
 
-Write-LogAnalyticsLog -Level "Info" -Message "$($filteredUsers.Count) filtered users retrieved successfully." -Properties @{ FilteredUserCount = $filteredUsers.Count }
+Write-LogAnalyticsLog -Level "Info" -Message "'$($filteredUsers.Count)' filtered users retrieved successfully." -Properties @{ FilteredUserCount = $filteredUsers.Count }
 
 $notificationPeriod = 14  # Number of days before disabling the account
 
@@ -344,8 +352,10 @@ if (Test-Path $emaileduserlogFile) {
 }
 
 # Send email notification to each filtered user
-foreach ($user in $filteredUsers) {
-    $emailedUser = $emailedUsers | Where-Object { $_.userName -eq $user.userName }
+foreach ($user in $filteredUsers) {  
+	$emailedUsers = $emailedUsers | Where-Object {
+		($_.UserName -as [string]).Trim().ToLower() -ne ($emailedUser.UserName -as [string]).Trim().ToLower()
+	}
     if (-not $emailedUser) {
         $lastLogin = $null
         $userCreated = $null
@@ -448,7 +458,7 @@ $emailedUsers | Where-Object { $_.UserName -and $_.UserName.Trim() -ne "" } |
     Export-Csv -Path $emaileduserlogFile -NoTypeInformation
 
 # Disable users who have been notified and the notification period has passed
-foreach ($emailedUser in $emailedUsers) {
+foreach ($emailedUser in @($emailedUsers)) {
     $user = $allUsers | Where-Object { $_.userName -eq $emailedUser.UserName }
     if ($user) {
         $lastLogin = $null
@@ -458,8 +468,10 @@ foreach ($emailedUser in $emailedUsers) {
                 UserName = $user.userName
                 EmailAddress = $user.emailAddress
                 LastLogin = $lastLogin
-            }
-            $emailedUsers = $emailedUsers | Where-Object { $_.UserName -ne $user.userName }
+            }            
+			$emailedUsers = $emailedUsers | Where-Object {
+				($_.UserName -as [string]).Trim().ToLower() -ne ($emailedUser.UserName -as [string]).Trim().ToLower()
+			}
             continue
         }
         if ($user.Enabled -eq $false) {
@@ -467,7 +479,9 @@ foreach ($emailedUser in $emailedUsers) {
                 UserName = $user.userName
                 EmailAddress = $user.emailAddress
             }
-            $emailedUsers = $emailedUsers | Where-Object { $_.UserName -ne $user.userName }
+   			$emailedUsers = $emailedUsers | Where-Object {
+				($_.UserName -as [string]).Trim().ToLower() -ne ($emailedUser.UserName -as [string]).Trim().ToLower()
+			}
             continue
         }
         $dateEmailed = [datetime]::Parse($emailedUser.DateEmailed)
@@ -492,8 +506,10 @@ foreach ($emailedUser in $emailedUsers) {
                             DisplayName = $user.displayName
                             EmailAddress = $user.emailAddress
                         }
-                        # Remove the user from the emaileduser CSV file
-                        $emailedUsers = $emailedUsers | Where-Object { $_.UserName -ne $user.userName }
+                        # Remove the user from the emaileduser CSV file                        
+						$emailedUsers = $emailedUsers | Where-Object {
+							($_.UserName -as [string]).Trim().ToLower() -ne ($emailedUser.UserName -as [string]).Trim().ToLower()
+						}
                         # Break the disable 'while' loop, but will continue the initial ForEach loop
                         break
                     }
