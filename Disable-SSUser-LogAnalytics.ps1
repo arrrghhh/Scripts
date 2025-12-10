@@ -353,9 +353,7 @@ if (Test-Path $emaileduserlogFile) {
 
 # Send email notification to each filtered user
 foreach ($user in $filteredUsers) {  
-	$emailedUsers = $emailedUsers | Where-Object {
-		($_.UserName -as [string]).Trim().ToLower() -ne ($emailedUser.UserName -as [string]).Trim().ToLower()
-	}
+	$emailedUser = $emailedUsers | Where-Object { $_.userName -eq $user.userName }
     if (-not $emailedUser) {
         $lastLogin = $null
         $userCreated = $null
