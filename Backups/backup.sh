@@ -22,17 +22,23 @@ log_msg() { echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"; }
 # 2. Targeted Files & Exclusions
 BACKUP_FILES="/home /etc /usr/local/bin /var/spool/cron /media/complete/sabnzbd"
 EXCLUDES=(
-    --exclude="*/.cache/*"
-    --exclude="*/.vscode-server/*"
-    --exclude="*/Dropbox/*"
-    --exclude="*/.plex/*"
-    --exclude="*/.scrypted/*"
-    --exclude="*/.frigate/model_cache/*"
-    --exclude="*/.homeassistant/home-assistant_v2.db*"
-    --exclude="*/.homeassistant/tmp/*"
-    --exclude="*/pihole-FTL.db"
-    --exclude="*/sabnzbd/Downloads/*"
-    --exclude="*/sabnzbd/logs/*"
+    --exclude="*/backups_local/*"           # STOPS the 1GB recursive backup loop
+    --exclude="*/.homeassistant/backups/*"   # Removes redundant HA internal backups
+    --exclude="*/.medusa/Logs/*"            # Drops Medusa log history
+    --exclude="*/.medusa/cache*"             # Drops Medusa cache/WAL files
+    --exclude="*/.deluge/config/supervisord.log*" # Drops Deluge log rotation
+    --exclude="*/.git/*"                     # Drops large .git objects
+    --exclude="*/.homeassistant/tmp/*"      # Prevents HA temp file bloat
+    --exclude="*/pihole-FTL.db"             # Excludes large Pi-hole database
+    --exclude="*/sabnzbd/Downloads/*"       # Skips active download data
+    --exclude="*/sabnzbd/logs/*"            # Skips SABnzbd log history
+    --exclude="*/.cache/*"                  # General app caches
+    --exclude="*/.vscode-server/*"          # VS Code binaries/extensions
+    --exclude="*/Dropbox/*"                 # Skips cloud-synced data
+    --exclude="*/.plex/*"                   # Skips massive Plex metadata
+    --exclude="*/.scrypted/*"               # Skips NVR/Camera caches
+    --exclude="*/.frigate/model_cache/*"    # Skips AI model caches
+    --exclude="*/.homeassistant/home-assistant_v2.db*" # Skips live HA DB
 )
 
 # 3. Execution
@@ -41,7 +47,7 @@ log_msg "Starting exhaustive backup for $NODE"
 
 # TAR with progress checkpoints
 tar --warning=no-file-changed "${EXCLUDES[@]}" \
-    --checkpoint=10000 --checkpoint-action=echo="Compressed %u elements..." \
+    --checkpoint=50000 --checkpoint-action=echo="Compressed %u elements..." \
     -czf "${LOCAL_TEMP}/${ARCHIVE}" $BACKUP_FILES >> "$LOG_FILE" 2>&1
 
 if [ $? -le 1 ]; then
@@ -54,7 +60,7 @@ if [ $? -le 1 ]; then
         
         log_msg "Syncing to Cloud (Google Drive)..."
         rclone --config "$RCLONE_CONF" copy "${PRIMARY_HDD}/${ARCHIVE}" "gdrive:Backups/ubuntu_backup/$NODE" \
-               --stats 30s --stats-one-line >> "$LOG_FILE" 2>&1
+               --stats 1m --stats-one-line >> "$LOG_FILE" 2>&1
                     
         find "$PRIMARY_HDD" -name "${NODE}-backup-*.tgz" -mtime +7 -delete
     else
@@ -72,5 +78,7 @@ else
     log_msg "ERROR: Backup failed for $NODE."
     exit 1
 fi
+
+rclone --config "$RCLONE_CONF" copy /home/arrrghhh/.homeassistant/backups/ "gdrive:Backups/HA_Direct" --max-age 24h
 
 chown -R arrrghhh:arrrghhh "$LOG_DIR"
