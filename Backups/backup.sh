@@ -7,10 +7,13 @@ LOCAL_TEMP="/home/arrrghhh/backups_local"
 LOG_DIR="/home/arrrghhh/backup_logs"
 LOG_FILE="${LOG_DIR}/backup_${NODE}_${DATE}.log"
 
-# Define the Local HDD path (Primary only) and the Cloud Mount path
+# Explicitly point to your user's rclone config so root can see it
+RCLONE_CONF="/home/arrrghhh/.config/rclone/rclone.conf"
+
 PRIMARY_HDD="/media/backup/Backups/UbuntuServer/$NODE"
 CLOUD_MOUNT="/media/gdrive/Backups/ubuntu_backup/$NODE"
 
+# Ensure log and local temp dirs exist
 mkdir -p "$LOCAL_TEMP" "$LOG_DIR"
 
 log_msg() { echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"; }
@@ -32,29 +35,24 @@ EXCLUDES=(
 # 3. Execution
 BACKUP_FILES="/home /etc /usr/local/bin /var/spool/cron /media/complete/sabnzbd"
 ARCHIVE="${NODE}-backup-${DATE}.tgz"
-
 log_msg "Starting backup for $NODE"
 
-# Step A: Create the archive locally for speed and reliability
 tar --warning=no-file-changed "${EXCLUDES[@]}" -czf "${LOCAL_TEMP}/${ARCHIVE}" $BACKUP_FILES
 
 if [ $? -le 1 ]; then
     log_msg "Local archive created successfully."
 
-    # Step B: Determine Destination and Sync
     if [ -d "/media/backup/Backups/UbuntuServer" ]; then
-        # PRIMARY SERVER LOGIC: Move to HDD, then Copy to Cloud
-        log_msg "Primary server detected. Moving to HDD and syncing to Cloud."
+        log_msg "Primary server detected. Preparing HDD destination."
+        mkdir -p "$PRIMARY_HDD"
         mv "${LOCAL_TEMP}/${ARCHIVE}" "${PRIMARY_HDD}/"
         
-        # Use rclone to push the new file to Google Drive
-        rclone copy "${PRIMARY_HDD}/${ARCHIVE}" "gdrive:Backups/ubuntu_backup/$NODE"
+        # Point to the specific config file for rclone
+        rclone --config "$RCLONE_CONF" copy "${PRIMARY_HDD}/${ARCHIVE}" "gdrive:Backups/ubuntu_backup/$NODE"
         
-        # Cleanup HDD (Keep 7 days)
         find "$PRIMARY_HDD" -name "${NODE}-backup-*.tgz" -mtime +7 -delete
     else
-        # SECONDARY SERVER LOGIC: Move directly to Cloud Mount
-        log_msg "Secondary/Third server detected. Moving to Cloud Mount."
+        log_msg "Secondary/Third server detected. Preparing Cloud Mount."
         mkdir -p "$CLOUD_MOUNT"
         mv "${LOCAL_TEMP}/${ARCHIVE}" "${CLOUD_MOUNT}/"
         
