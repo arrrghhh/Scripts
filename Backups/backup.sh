@@ -45,30 +45,37 @@ EXCLUDES=(
 ARCHIVE="${NODE}-backup-${DATE}.tgz"
 log_msg "Starting exhaustive backup for $NODE"
 
-# TAR with progress checkpoints
 tar --warning=no-file-changed "${EXCLUDES[@]}" \
     --checkpoint=50000 --checkpoint-action=echo="Compressed %u elements..." \
     -czf "${LOCAL_TEMP}/${ARCHIVE}" $BACKUP_FILES >> "$LOG_FILE" 2>&1
 
 if [ $? -le 1 ]; then
-    log_msg "Local archive created successfully."
+    if tar -tzf "${LOCAL_TEMP}/${ARCHIVE}" > /dev/null 2>&1; then
+        log_msg "Integrity check passed."
+    else
+        log_msg "ERROR: Integrity check failed."
+        exit 1
+    fi
 
     if [ -d "/media/backup/Backups/UbuntuServer" ]; then
-        log_msg "Primary server detected. Moving to HDD..."
+        log_msg "Primary server detected. Syncing to HDD..."
         mkdir -p "$PRIMARY_HDD"
         rsync -a --remove-source-files --stats "${LOCAL_TEMP}/${ARCHIVE}" "${PRIMARY_HDD}/" >> "$LOG_FILE" 2>&1
         
         log_msg "Syncing to Cloud (Google Drive)..."
         rclone --config "$RCLONE_CONF" copy "${PRIMARY_HDD}/${ARCHIVE}" "gdrive:Backups/ubuntu_backup/$NODE" \
-               --stats 1m --stats-one-line >> "$LOG_FILE" 2>&1
+               -v --stats 15s --stats-one-line >> "$LOG_FILE" 2>&1
                     
         find "$PRIMARY_HDD" -name "${NODE}-backup-*.tgz" -mtime +7 -delete
     else
-        log_msg "Secondary server detected. Moving to Cloud Mount..."
+        log_msg "Secondary server detected. Syncing to Cloud Mount..."
         mkdir -p "$CLOUD_MOUNT"
         rsync -a --remove-source-files --stats "${LOCAL_TEMP}/${ARCHIVE}" "${CLOUD_MOUNT}/" >> "$LOG_FILE" 2>&1
         find "$CLOUD_MOUNT" -name "${NODE}-backup-*.tgz" -mtime +7 -delete
     fi
+
+    log_msg "Syncing latest HA internal backup to GDrive..."
+    rclone --config "$RCLONE_CONF" copy /home/arrrghhh/.homeassistant/backups/ "gdrive:Backups/HA_Direct" --max-age 24h >> "$LOG_FILE" 2>&1
     
     # Calculate Duration
     END_TIME=$(date +%s)
@@ -78,7 +85,5 @@ else
     log_msg "ERROR: Backup failed for $NODE."
     exit 1
 fi
-
-rclone --config "$RCLONE_CONF" copy /home/arrrghhh/.homeassistant/backups/ "gdrive:Backups/HA_Direct" --max-age 24h
 
 chown -R arrrghhh:arrrghhh "$LOG_DIR"
