@@ -22,16 +22,17 @@ log_msg() { echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"; }
 # 2. Targeted Files & Exclusions
 BACKUP_FILES="/home /etc /usr/local/bin /var/spool/cron /media/complete/sabnzbd"
 EXCLUDES=(
-    --exclude="*/.cache"
-    --exclude="*/.vscode-server"
-    --exclude="*/Dropbox"
-    --exclude="*/.plex"
-    --exclude="*/.scrypted"
-    --exclude="*/.frigate/model_cache"
+    --exclude="*/.cache/*"
+    --exclude="*/.vscode-server/*"
+    --exclude="*/Dropbox/*"
+    --exclude="*/.plex/*"
+    --exclude="*/.scrypted/*"
+    --exclude="*/.frigate/model_cache/*"
     --exclude="*/.homeassistant/home-assistant_v2.db*"
-    --exclude="*/.homeassistant/tmp"
-    --exclude="*/sabnzbd/Downloads"
-    --exclude="*/sabnzbd/logs"
+    --exclude="*/.homeassistant/tmp/*"
+    --exclude="*/pihole-FTL.db"
+    --exclude="*/sabnzbd/Downloads/*"
+    --exclude="*/sabnzbd/logs/*"
 )
 
 # 3. Execution
@@ -53,8 +54,8 @@ if [ $? -le 1 ]; then
         
         log_msg "Syncing to Cloud (Google Drive)..."
         rclone --config "$RCLONE_CONF" copy "${PRIMARY_HDD}/${ARCHIVE}" "gdrive:Backups/ubuntu_backup/$NODE" \
-               --progress --stats-one-line --stats 30s >> "$LOG_FILE" 2>&1
-        
+               --stats 30s --stats-one-line >> "$LOG_FILE" 2>&1
+                    
         find "$PRIMARY_HDD" -name "${NODE}-backup-*.tgz" -mtime +7 -delete
     else
         log_msg "Secondary server detected. Moving to Cloud Mount..."
