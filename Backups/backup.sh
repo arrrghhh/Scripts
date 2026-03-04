@@ -1,6 +1,7 @@
 #!/bin/bash
 
 # 1. Identity & Paths
+START_TIME=$(date +%s)
 NODE=$(hostname)
 DATE=$(date +%Y-%m-%d)
 LOCAL_TEMP="/home/arrrghhh/backups_local"
@@ -18,7 +19,8 @@ mkdir -p "$LOCAL_TEMP" "$LOG_DIR"
 
 log_msg() { echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"; }
 
-# 2. Precision Exclusions
+# 2. Targeted Files & Exclusions
+BACKUP_FILES="/home /etc /usr/local/bin /var/spool/cron /media/complete/sabnzbd"
 EXCLUDES=(
     --exclude="*/.cache"
     --exclude="*/.vscode-server"
@@ -33,34 +35,38 @@ EXCLUDES=(
 )
 
 # 3. Execution
-BACKUP_FILES="/home /etc /usr/local/bin /var/spool/cron /media/complete/sabnzbd"
 ARCHIVE="${NODE}-backup-${DATE}.tgz"
-log_msg "Starting backup for $NODE"
+log_msg "Starting exhaustive backup for $NODE"
 
-tar --warning=no-file-changed "${EXCLUDES[@]}" -czf "${LOCAL_TEMP}/${ARCHIVE}" $BACKUP_FILES
+# TAR with progress checkpoints
+tar --warning=no-file-changed "${EXCLUDES[@]}" \
+    --checkpoint=10000 --checkpoint-action=echo="Compressed %u elements..." \
+    -czf "${LOCAL_TEMP}/${ARCHIVE}" $BACKUP_FILES >> "$LOG_FILE" 2>&1
 
 if [ $? -le 1 ]; then
     log_msg "Local archive created successfully."
 
     if [ -d "/media/backup/Backups/UbuntuServer" ]; then
-        log_msg "Primary server detected. Preparing HDD destination."
+        log_msg "Primary server detected. Moving to HDD..."
         mkdir -p "$PRIMARY_HDD"
-        mv "${LOCAL_TEMP}/${ARCHIVE}" "${PRIMARY_HDD}/"
+        rsync -a --remove-source-files --stats "${LOCAL_TEMP}/${ARCHIVE}" "${PRIMARY_HDD}/" >> "$LOG_FILE" 2>&1
         
-        # Point to the specific config file for rclone
-        rclone --config "$RCLONE_CONF" copy "${PRIMARY_HDD}/${ARCHIVE}" "gdrive:Backups/ubuntu_backup/$NODE"
+        log_msg "Syncing to Cloud (Google Drive)..."
+        rclone --config "$RCLONE_CONF" copy "${PRIMARY_HDD}/${ARCHIVE}" "gdrive:Backups/ubuntu_backup/$NODE" \
+               --progress --stats-one-line --stats 30s >> "$LOG_FILE" 2>&1
         
         find "$PRIMARY_HDD" -name "${NODE}-backup-*.tgz" -mtime +7 -delete
     else
-        log_msg "Secondary/Third server detected. Preparing Cloud Mount."
+        log_msg "Secondary server detected. Moving to Cloud Mount..."
         mkdir -p "$CLOUD_MOUNT"
-        mv "${LOCAL_TEMP}/${ARCHIVE}" "${CLOUD_MOUNT}/"
-        
-        # Cleanup Cloud Mount (Keep 7 days)
+        rsync -a --remove-source-files --stats "${LOCAL_TEMP}/${ARCHIVE}" "${CLOUD_MOUNT}/" >> "$LOG_FILE" 2>&1
         find "$CLOUD_MOUNT" -name "${NODE}-backup-*.tgz" -mtime +7 -delete
     fi
     
-    log_msg "Backup and pruning completed successfully."
+    # Calculate Duration
+    END_TIME=$(date +%s)
+    DIFF=$(( END_TIME - START_TIME ))
+    log_msg "Backup and pruning completed successfully. Total Duration: $((DIFF / 60))m $((DIFF % 60))s"
 else
     log_msg "ERROR: Backup failed for $NODE."
     exit 1
