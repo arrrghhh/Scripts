@@ -60,8 +60,8 @@ ARCHIVE="${NODE}-backup-${DATE}.tgz"
 log_msg "Starting exhaustive backup for $NODE"
 
 tar --warning=no-file-changed --ignore-failed-read "${EXCLUDES[@]}" \
-    --checkpoint=50000 --checkpoint-action=echo="Compressed %u elements..." \
-    -czf "${LOCAL_TEMP}/${ARCHIVE}" $BACKUP_FILES >> "$LOG_FILE" 2>&1
+    --checkpoint=1000 --checkpoint-action=echo="Compressed %u elements..." \
+    -czf "${LOCAL_TEMP}/${ARCHIVE}" -C / $BACKUP_FILES >> "$LOG_FILE" 2>&1
 
 if [ $? -le 1 ]; then
     if tar -tzf "${LOCAL_TEMP}/${ARCHIVE}" > /dev/null 2>&1; then
