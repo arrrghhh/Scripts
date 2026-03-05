@@ -37,19 +37,7 @@ SOURCES=(
     "/media/complete/sabnzbd"
 )
 BACKUP_FILES=()
-echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting Backup Inventory:" >> "$LOG_FILE"
-for dir in "${SOURCES[@]}"; do
-    if [ -d "$dir" ]; then
-        # Log the size
-        size=$(du -sh "$dir" | cut -f1)
-        echo "  [+] Adding $dir ($size)" >> "$LOG_FILE"
-        
-        # The syntax ${dir#/} works on the individual variable
-        BACKUP_FILES+=( "${dir#/}" )
-    else
-        echo "  [!] Skipping $dir (Not Found)" >> "$LOG_FILE"
-    fi
-done
+
 EXCLUDES=(
     --exclude="*/backups_local/*"                       # STOPS the 1GB recursive backup loop
     --exclude="*/.homeassistant/backups/*"              # Removes redundant HA internal backups
@@ -70,6 +58,20 @@ EXCLUDES=(
     --exclude="*/.scrypted/*"                           # Skips NVR/Camera caches
     --exclude="*/.frigate/model_cache/*"                # Skips AI model caches
 )
+
+echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting Backup Inventory:" >> "$LOG_FILE"
+for dir in "${SOURCES[@]}"; do
+    if [ -d "$dir" ]; then
+        # 1. We pass the same EXCLUDES to du so the math matches tar
+        # Using "${EXCLUDES[@]}" here keeps the logic consistent
+        size=$(du -sh "${EXCLUDES[@]}" "$dir" | cut -f1)
+        
+        echo "  [+] Adding $dir (Actual: $size)" >> "$LOG_FILE"
+        BACKUP_FILES+=( "${dir#/}" )
+    else
+        echo "  [!] Skipping $dir (Not Found)" >> "$LOG_FILE"
+    fi
+done
 
 # 3. Execution
 ARCHIVE="${NODE}-backup-${DATE}.tgz"
