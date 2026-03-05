@@ -32,7 +32,7 @@ log_msg() { echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"; }
 SOURCES="/home /etc /usr/local/bin /var/spool/cron /media/complete/sabnzbd"
 BACKUP_FILES=""
 for dir in $SOURCES; do
-    [ -d "$dir" ] && BACKUP_FILES="$BACKUP_FILES $dir"
+    [ -d "$dir" ] && BACKUP_FILES="$BACKUP_FILES ${dir#/}"
 done
 EXCLUDES=(
     --exclude="*/backups_local/*"                       # STOPS the 1GB recursive backup loop
@@ -61,7 +61,7 @@ log_msg "Starting exhaustive backup for $NODE"
 
 tar --warning=no-file-changed --ignore-failed-read "${EXCLUDES[@]}" \
     --checkpoint=1000 --checkpoint-action=echo="Compressed %u elements..." \
-    -czf "${LOCAL_TEMP}/${ARCHIVE}" -C / ${BACKUP_FILES#/} >> "$LOG_FILE" 2>&1
+    -czf "${LOCAL_TEMP}/${ARCHIVE}" -C / $BACKUP_FILES >> "$LOG_FILE" 2>&1
 
 if [ $? -le 1 ]; then
     if tar -tzf "${LOCAL_TEMP}/${ARCHIVE}" > /dev/null 2>&1; then
