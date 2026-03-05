@@ -30,9 +30,19 @@ log_msg() { echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"; }
 
 # 2. Targeted Files & Exclusions
 SOURCES="/home /etc /usr/local/bin /var/spool/cron /media/complete/sabnzbd"
-BACKUP_FILES=""
+BACKUP_FILES=()
+echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting Backup Inventory:" >> "$LOG_FILE"
 for dir in $SOURCES; do
-    [ -d "$dir" ] && BACKUP_FILES="$BACKUP_FILES ${dir#/}"
+    if [ -d "$dir" ]; then
+        # Log the size
+        size=$(du -sh "$dir" | cut -f1)
+        echo "  [+] Adding $dir ($size)" >> "$LOG_FILE"
+        
+        # The syntax ${dir#/} works on the individual variable
+        BACKUP_FILES+=( "${dir#/}" )
+    else
+        echo "  [!] Skipping $dir (Not Found)" >> "$LOG_FILE"
+    fi
 done
 EXCLUDES=(
     --exclude="*/backups_local/*"                       # STOPS the 1GB recursive backup loop
@@ -61,7 +71,7 @@ log_msg "Starting exhaustive backup for $NODE"
 
 tar --warning=no-file-changed --ignore-failed-read "${EXCLUDES[@]}" \
     --checkpoint=5000 --checkpoint-action=echo="Compressed %u elements..." \
-    -czf "${LOCAL_TEMP}/${ARCHIVE}" -C / $BACKUP_FILES >> "$LOG_FILE" 2>&1
+    -czf "${LOCAL_TEMP}/${ARCHIVE}" -C / "${BACKUP_FILES[@]}" >> "$LOG_FILE" 2>&1
 
 if [ $? -le 1 ]; then
     if tar -tzf "${LOCAL_TEMP}/${ARCHIVE}" > /dev/null 2>&1; then
