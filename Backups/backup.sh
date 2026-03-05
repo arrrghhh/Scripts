@@ -87,7 +87,7 @@ if [ $? -le 1 ]; then
         for TARGET in "${NODES[@]}"; do
             if [[ "$TARGET" != "$NODE" ]]; then
                 log_msg "Pushing cross-backup to $TARGET..."
-                rsync -a "${PRIMARY_HDD}/${ARCHIVE}" "root@${TARGET}:${CROSS_PATH}/${NODE}/" >> "$LOG_FILE" 2>&1
+                rsync -a --rsync-path="mkdir -p ${CROSS_PATH}/${NODE} && rsync" "${PRIMARY_HDD}/${ARCHIVE}" "root@${TARGET}:${CROSS_PATH}/${NODE}/" >> "$LOG_FILE" 2>&1
             fi
         done
     else
