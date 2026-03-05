@@ -29,10 +29,16 @@ mkdir -p "$LOCAL_TEMP" "$LOG_DIR"
 log_msg() { echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"; }
 
 # 2. Targeted Files & Exclusions
-SOURCES="/home /etc /usr/local/bin /var/spool/cron /media/complete/sabnzbd"
+SOURCES=(
+    "/home"
+    "/etc"
+    "/usr/local/bin"
+    "/var/spool/cron"
+    "/media/complete/sabnzbd"
+)
 BACKUP_FILES=()
 echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting Backup Inventory:" >> "$LOG_FILE"
-for dir in $SOURCES; do
+for dir in "${SOURCES[@]}"; do
     if [ -d "$dir" ]; then
         # Log the size
         size=$(du -sh "$dir" | cut -f1)
