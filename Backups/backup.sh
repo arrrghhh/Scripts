@@ -4,8 +4,8 @@
 START_TIME=$(date +%s)
 NODE=$(hostname)
 DATE=$(date +%Y-%m-%d)
-LOCAL_TEMP="/home/arrrghhh/backups_local"
-LOG_DIR="/home/arrrghhh/backup_logs"
+LOCAL_TEMP="/var/tmp/backups_local"
+LOG_DIR="/var/log/backup_logs"
 LOG_FILE="${LOG_DIR}/backup_${NODE}_${DATE}.log"
 
 # Explicitly point to your user's rclone config so root can see it
@@ -29,7 +29,11 @@ mkdir -p "$LOCAL_TEMP" "$LOG_DIR"
 log_msg() { echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"; }
 
 # 2. Targeted Files & Exclusions
-BACKUP_FILES="/home /etc /usr/local/bin /var/spool/cron /media/complete/sabnzbd"
+SOURCES="/home /etc /usr/local/bin /var/spool/cron /media/complete/sabnzbd"
+BACKUP_FILES=""
+for dir in $SOURCES; do
+    [ -d "$dir" ] && BACKUP_FILES="$BACKUP_FILES $dir"
+done
 EXCLUDES=(
     --exclude="*/backups_local/*"                       # STOPS the 1GB recursive backup loop
     --exclude="*/.homeassistant/backups/*"              # Removes redundant HA internal backups
@@ -55,7 +59,7 @@ EXCLUDES=(
 ARCHIVE="${NODE}-backup-${DATE}.tgz"
 log_msg "Starting exhaustive backup for $NODE"
 
-tar --warning=no-file-changed "${EXCLUDES[@]}" \
+tar --warning=no-file-changed --ignore-failed-read "${EXCLUDES[@]}" \
     --checkpoint=50000 --checkpoint-action=echo="Compressed %u elements..." \
     -czf "${LOCAL_TEMP}/${ARCHIVE}" $BACKUP_FILES >> "$LOG_FILE" 2>&1
 
