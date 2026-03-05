@@ -18,7 +18,7 @@ CROSS_PATH="/media/backup/Backups/UbuntuServer/cross_backups"
 
 # Use the aliases defined in your /root/.ssh/config
 NODES=(
-    "summithouse"
+    "summitserver"
     "nas"
     "usrv"
 )
@@ -75,11 +75,11 @@ if [ $? -le 1 ]; then
     if [ -d "$PRIMARY_BASE" ]; then
         log_msg "Primary storage ready. Syncing to HDD..."
         mkdir -p "$PRIMARY_HDD"
-        rsync -a --remove-source-files --stats "${LOCAL_TEMP}/${ARCHIVE}" "${PRIMARY_HDD}/" >> "$LOG_FILE" 2>&1
+        rsync -ah --remove-source-files "${LOCAL_TEMP}/${ARCHIVE}" "${PRIMARY_HDD}/" 2>&1 | grep -E 'sent|total size' >> "$LOG_FILE"
         
         log_msg "Syncing to Cloud (Google Drive)..."
         rclone --config "$RCLONE_CONF" copy "${PRIMARY_HDD}/${ARCHIVE}" "gdrive:Backups/ubuntu_backup/$NODE" \
-               -v --stats 15s --stats-one-line >> "$LOG_FILE" 2>&1
+               -v --stats 15s --stats-one-line --human-readable >> "$LOG_FILE" 2>&1
                     
         find "$PRIMARY_HDD" -name "${NODE}-backup-*.tgz" -mtime +7 -delete
         
@@ -87,13 +87,14 @@ if [ $? -le 1 ]; then
         for TARGET in "${NODES[@]}"; do
             if [[ "$TARGET" != "$NODE" ]]; then
                 log_msg "Pushing cross-backup to $TARGET..."
-                rsync -a --rsync-path="mkdir -p ${CROSS_PATH}/${NODE} && rsync" "${PRIMARY_HDD}/${ARCHIVE}" "root@${TARGET}:${CROSS_PATH}/${NODE}/" >> "$LOG_FILE" 2>&1
+                rsync -ah --rsync-path="mkdir -p ${CROSS_PATH}/${NODE} && rsync" --info=stats1 \
+                      "${PRIMARY_HDD}/${ARCHIVE}" "root@${TARGET}:${CROSS_PATH}/${NODE}/" >> "$LOG_FILE" 2>&1
             fi
         done
     else
         log_msg "Primary storage missing. Syncing to Cloud Mount..."
         mkdir -p "$CLOUD_MOUNT"
-        rsync -a --remove-source-files --stats "${LOCAL_TEMP}/${ARCHIVE}" "${CLOUD_MOUNT}/" >> "$LOG_FILE" 2>&1
+        sync -ah --remove-source-files --info=stats1 "${LOCAL_TEMP}/${ARCHIVE}" "${CLOUD_MOUNT}/" >> "$LOG_FILE" 2>&1
         find "$CLOUD_MOUNT" -name "${NODE}-backup-*.tgz" -mtime +7 -delete
     fi
 
