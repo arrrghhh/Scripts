@@ -36,6 +36,7 @@ SOURCES=(
     "/var/spool/cron"
     "/media/complete/sabnzbd"
 )
+TOTAL_SOURCE_SIZE_KB=0
 BACKUP_FILES=()
 
 EXCLUDES=(
@@ -62,11 +63,10 @@ EXCLUDES=(
 echo "$(date '+%Y-%m-%d %H:%M:%S') - Starting Backup Inventory:" >> "$LOG_FILE"
 for dir in "${SOURCES[@]}"; do
     if [ -d "$dir" ]; then
-        # 1. We pass the same EXCLUDES to du so the math matches tar
-        # Using "${EXCLUDES[@]}" here keeps the logic consistent
-        size=$(du -sh "${EXCLUDES[@]}" "$dir" | cut -f1)
-        
-        echo "  [+] Adding $dir (Actual: $size)" >> "$LOG_FILE"
+        size_kb=$(du -sk "${EXCLUDES[@]}" "$dir" | cut -f1)
+        TOTAL_SOURCE_SIZE_KB=$((TOTAL_SOURCE_SIZE_KB + size_kb))
+        human_size=$(numfmt --to=iec --suffix=B --format="%.1f" $((size_kb * 1024)))
+        echo "  [+] Adding $dir (Actual: $human_size)" >> "$LOG_FILE"
         BACKUP_FILES+=( "${dir#/}" )
     else
         echo "  [!] Skipping $dir (Not Found)" >> "$LOG_FILE"
@@ -126,6 +126,20 @@ if [ $? -le 1 ]; then
     if [ -d "/home/arrrghhh/.homeassistant/backups/" ]; then
         log_msg "Syncing latest HA internal backup to GDrive..."
         rclone --config "$RCLONE_CONF" copy /home/arrrghhh/.homeassistant/backups/ "gdrive:Backups/HA_Direct" --max-age 24h >> "$LOG_FILE" 2>&1
+    fi
+
+    if [ -f "${PRIMARY_HDD}/${ARCHIVE}" ]; then
+        final_size_kb=$(du -sk "${PRIMARY_HDD}/${ARCHIVE}" | cut -f1)
+        
+        # Pretty print the numbers
+        pretty_source=$(numfmt --to=iec --suffix=B --format="%.1f" $((TOTAL_SOURCE_SIZE_KB * 1024)))
+        pretty_final=$(numfmt --to=iec --suffix=B --format="%.1f" $((final_size_kb * 1024)))
+        
+        # Calculate ratio using bc
+        ratio=$(echo "scale=2; ($final_size_kb / $TOTAL_SOURCE_SIZE_KB) * 100" | bc)
+
+        echo "---" >> "$LOG_FILE"
+        log_msg "Backup Stats: Source: $pretty_source | Archive: $pretty_final | Ratio: ${ratio}%"
     fi
     
     # Calculate Duration
