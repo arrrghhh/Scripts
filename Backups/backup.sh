@@ -153,3 +153,23 @@ else
 fi
 
 chown -R arrrghhh:arrrghhh "$LOG_DIR"
+
+# --- Monthly Log Archiving Logic ---
+# On the 1st of every month, bundle last month's logs
+if [ "$(date +%d)" = "01" ]; then
+    LAST_MONTH=$(date -d "last month" +%Y-%m)
+    ARCHIVE_DIR="${LOG_DIR}/archives"
+    mkdir -p "$ARCHIVE_DIR"
+    
+    log_msg "Archiving logs for ${LAST_MONTH}..."
+    
+    # Bundle all logs from last month into one tgz
+    tar -czf "${ARCHIVE_DIR}/backup_logs_${LAST_MONTH}.tgz" \
+        -C "$LOG_DIR" $(ls "$LOG_DIR" | grep "$LAST_MONTH")
+    
+    # Delete the individual files we just archived
+    find "$LOG_DIR" -maxdepth 1 -name "*${LAST_MONTH}*" -delete
+fi
+
+# Final cleanup: Keep 1 year archives (12 months total)
+find "${LOG_DIR}/archives" -name "*.tgz" -mtime +365 -delete
