@@ -6,7 +6,7 @@ NODE=$(hostname)
 DATE=$(date +%Y-%m-%d)
 LOCAL_TEMP="/var/tmp/backups_local"
 LOG_DIR="/var/log/backup_logs"
-LOG_FILE="${LOG_DIR}/backup_${NODE}_${DATE}.log"
+LOG_FILE="${LOG_DIR}/backup_${NODE}.log"
 
 # Explicitly point to your user's rclone config so root can see it
 RCLONE_CONF="/home/arrrghhh/.config/rclone/rclone.conf"
