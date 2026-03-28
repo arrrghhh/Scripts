@@ -151,20 +151,20 @@ if [ -d "$PRIMARY_BASE" ]; then
     log_msg "Uploading to GDrive daily (${GDRIVE_DAILY})..."
     rclone --config "$RCLONE_CONF" \
         copy "${PRIMARY_HDD}/${ARCHIVE}" "$GDRIVE_DAILY" \
-        --log-level WARN >> "$LOG_FILE" 2>&1
+        --log-level ERROR >> "$LOG_FILE" 2>&1
 
     if [ "$DOW" = "7" ]; then
         log_msg "Sunday — copying to GDrive weekly (${GDRIVE_WEEKLY})..."
         rclone --config "$RCLONE_CONF" \
             copy "${GDRIVE_DAILY}/${ARCHIVE}" "$GDRIVE_WEEKLY" \
-            --log-level WARN >> "$LOG_FILE" 2>&1
+            --log-level ERROR >> "$LOG_FILE" 2>&1
     fi
 
     if [ "$DOM" = "01" ]; then
         log_msg "1st of month — copying to GDrive monthly (${GDRIVE_MONTHLY})..."
         rclone --config "$RCLONE_CONF" \
             copy "${GDRIVE_DAILY}/${ARCHIVE}" "$GDRIVE_MONTHLY" \
-            --log-level WARN >> "$LOG_FILE" 2>&1
+            --log-level ERROR >> "$LOG_FILE" 2>&1
     fi
 
     # GDrive pruning
@@ -213,7 +213,7 @@ if [ -d "$HA_BACKUP_DIR" ]; then
     log_msg "Syncing latest HA backup to GDrive (max-age 24h)..."
     rclone --config "$RCLONE_CONF" \
         copy "$HA_BACKUP_DIR" "gdrive:Backups/HA_Direct" \
-        --max-age 24h --log-level WARN >> "$LOG_FILE" 2>&1
+        --max-age 24h --log-level ERROR >> "$LOG_FILE" 2>&1
 fi
 
 # --- 12. Stats ---------------------------------------------------------------
