@@ -21,13 +21,12 @@ RCLONE_CONF="/home/arrrghhh/.config/rclone/rclone.conf"
 
 PRIMARY_BASE="/media/backup/Backups/UbuntuServer"
 PRIMARY_HDD="${PRIMARY_BASE}/${NODE}"
-CLOUD_MOUNT="/media/gdrive/Backups/ubuntu_backup/${NODE}"
 CROSS_PATH="${PRIMARY_BASE}/cross_backups"
 
 # GDrive paths
-GDRIVE_DAILY="gdrive:Backups/ubuntu_backup/${NODE}"
-GDRIVE_WEEKLY="gdrive:Backups/Weekly/${NODE}"
-GDRIVE_MONTHLY="gdrive:Backups/Monthly/${NODE}"
+GDRIVE_DAILY="gdrive:Backups/ubuntu_backup/Rolling/${NODE}"
+GDRIVE_WEEKLY="gdrive:Backups/ubuntu_backup/Rolling/${NODE}/weekly"
+GDRIVE_MONTHLY="gdrive:Backups/ubuntu_backup/Rolling/${NODE}/monthly"
 
 # Use the aliases defined in /root/.ssh/config
 NODES=("summitserver" "nas" "usrv")
@@ -137,7 +136,7 @@ if ! tar -tzf "${LOCAL_TEMP}/${ARCHIVE}" > /dev/null 2>&1; then
 fi
 log_msg "Integrity check passed."
 
-# --- 7. Distribute to local HDD or cloud mount fallback ----------------------
+# --- 7. Distribute archive ---------------------------------------------------
 if [ -d "$PRIMARY_BASE" ]; then
     log_msg "Primary HDD storage available."
     mkdir -p "$PRIMARY_HDD"
@@ -153,17 +152,18 @@ if [ -d "$PRIMARY_BASE" ]; then
         copy "${PRIMARY_HDD}/${ARCHIVE}" "$GDRIVE_DAILY" \
         --log-level ERROR >> "$LOG_FILE" 2>&1
 
+    # Weekly and monthly promote directly from local HDD — avoids a GDrive round-trip
     if [ "$DOW" = "7" ]; then
         log_msg "Sunday — copying to GDrive weekly (${GDRIVE_WEEKLY})..."
         rclone --config "$RCLONE_CONF" \
-            copy "${GDRIVE_DAILY}/${ARCHIVE}" "$GDRIVE_WEEKLY" \
+            copy "${PRIMARY_HDD}/${ARCHIVE}" "$GDRIVE_WEEKLY" \
             --log-level ERROR >> "$LOG_FILE" 2>&1
     fi
 
     if [ "$DOM" = "01" ]; then
         log_msg "1st of month — copying to GDrive monthly (${GDRIVE_MONTHLY})..."
         rclone --config "$RCLONE_CONF" \
-            copy "${GDRIVE_DAILY}/${ARCHIVE}" "$GDRIVE_MONTHLY" \
+            copy "${PRIMARY_HDD}/${ARCHIVE}" "$GDRIVE_MONTHLY" \
             --log-level ERROR >> "$LOG_FILE" 2>&1
     fi
 
@@ -181,7 +181,6 @@ if [ -d "$PRIMARY_BASE" ]; then
     for TARGET in "${NODES[@]}"; do
         if [[ "$TARGET" != "$NODE" ]]; then
             log_msg "Pushing cross-backup to ${TARGET}..."
-            # --mkpath requires rsync >= 3.2.3; falls back gracefully on older versions
             rsync -ahq --mkpath --info=stats1 \
                   "${PRIMARY_HDD}/${ARCHIVE}" \
                   "root@${TARGET}:${CROSS_PATH}/${NODE}/" >> "$LOG_FILE" 2>&1 \
@@ -190,15 +189,30 @@ if [ -d "$PRIMARY_BASE" ]; then
     done
 
 else
-    # Fallback: no local HDD — rsync straight to mounted GDrive
-    log_msg "WARNING: Primary HDD not found. Falling back to cloud mount..."
-    mkdir -p "$CLOUD_MOUNT"
-    rsync -ah --remove-source-files --info=stats1 \
-          "${LOCAL_TEMP}/${ARCHIVE}" "${CLOUD_MOUNT}/" >> "$LOG_FILE" 2>&1
-    find "$CLOUD_MOUNT" -name "${NODE}-backup-*.tgz" -mtime +7 -delete
+    # Fallback: no local HDD — upload directly to GDrive via rclone
+    log_msg "WARNING: Primary HDD not found. Uploading directly to GDrive..."
+    rclone --config "$RCLONE_CONF" \
+        copy "${LOCAL_TEMP}/${ARCHIVE}" "$GDRIVE_DAILY" \
+        --log-level ERROR >> "$LOG_FILE" 2>&1
+
+    if [ "$DOW" = "7" ]; then
+        rclone --config "$RCLONE_CONF" \
+            copy "${LOCAL_TEMP}/${ARCHIVE}" "$GDRIVE_WEEKLY" \
+            --log-level ERROR >> "$LOG_FILE" 2>&1
+    fi
+
+    if [ "$DOM" = "01" ]; then
+        rclone --config "$RCLONE_CONF" \
+            copy "${LOCAL_TEMP}/${ARCHIVE}" "$GDRIVE_MONTHLY" \
+            --log-level ERROR >> "$LOG_FILE" 2>&1
+    fi
+
+    rclone --config "$RCLONE_CONF" delete "$GDRIVE_DAILY"   --min-age 7d   >> "$LOG_FILE" 2>&1
+    rclone --config "$RCLONE_CONF" delete "$GDRIVE_WEEKLY"  --min-age 31d  >> "$LOG_FILE" 2>&1
+    rclone --config "$RCLONE_CONF" delete "$GDRIVE_MONTHLY" --min-age 185d >> "$LOG_FILE" 2>&1
 fi
 
-# Safety net: remove temp archive if rsync didn't consume it
+# Safety net: remove temp archive if it wasn't consumed
 rm -f "${LOCAL_TEMP}/${ARCHIVE}"
 
 # --- 10. Cross-backup pruning (incoming archives on this node) ---------------
