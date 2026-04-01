@@ -63,52 +63,62 @@ SOURCES=(
     "/media/complete/sabnzbd"
 )
 
-EXCLUDES=(
-    --exclude="*/backups_local/*"                       # Stops recursive backup loop
-    --exclude="*/.homeassistant/backups/*"              # Redundant HA internal backups
-    --exclude="*/.homeassistant/tts/*"                  # Cached text-to-speech audio
-    --exclude="*/.homeassistant/tmp/*"                  # HA temp file bloat
-    --exclude="*/.homeassistant/home-assistant_v2.db*"  # Live HA DB (often corrupted in tar)
-    --exclude="*/.medusa/Logs/*"                        # Medusa log history
-    --exclude="*/.medusa/cache*"                        # Medusa cache/WAL files
-    --exclude="*/.deluge/config/supervisord.log*"       # Deluge log rotation
-    --exclude="*/.deluge/supervisord.log*"              # Deluge log rotation
-    --exclude="*/.git/*"                                # Large .git objects
-    --exclude="*/pihole-FTL.db"                         # Large Pi-hole database
-    --exclude="*/.sabnzbd/Downloads/*"                  # Active download data
-    --exclude="*/.sabnzbd/logs/*"                       # SABnzbd log history
-    --exclude="*/.sabnzbd/*/logs/*"                     # SABnzbd nested logs
-    --exclude="*/.nginxproxmgr/logs/*"                  # Nginx Proxy Manager logs
-    --exclude="*/.cache/*"                              # General app caches
-    --exclude="*/.vscode-server/*"                      # VS Code binaries/extensions
-    --exclude="*/Dropbox/*"                             # Cloud-synced data
-    --exclude="*/.plex/*"                               # Plex metadata
-    --exclude="*/.scrypted/*"                           # NVR/camera caches
-    --exclude="*/.frigate/model_cache/*"                # Frigate AI model caches
-    --exclude="*/*.db-wal"                              # SQLite WAL files
-    --exclude="*/*.db-shm"                              # SQLite shared memory files
-    --exclude="*.js.map"                                # JS source maps
+# Single source of truth for exclude patterns.
+# Patterns starting with * are used as-is for tar; others get a leading */ prefix.
+# rsync always uses the plain pattern as-is.
+EXCLUDE_PATTERNS=(
+    "backups_local"                         # Stops recursive backup loop
+    ".homeassistant"                        # Backed up separately via HA section below
+    ".medusa/Logs"                          # Medusa log history
+    ".medusa/cache*"                        # Medusa cache/WAL files
+    ".deluge/config/supervisord.log*"       # Deluge log rotation
+    ".deluge/supervisord.log*"              # Deluge log rotation
+    ".git"                                  # Large .git objects
+    "pihole-FTL.db"                         # Large Pi-hole database
+    ".sabnzbd/Downloads"                    # Active download data
+    ".sabnzbd/logs"                         # SABnzbd log history
+    ".sabnzbd/*/logs"                       # SABnzbd nested logs
+    ".nginxproxmgr/logs"                    # Nginx Proxy Manager logs
+    ".cache"                                # General app caches
+    ".vscode-server"                        # VS Code binaries/extensions
+    "Dropbox"                               # Cloud-synced data
+    ".plex"                                 # Plex metadata
+    ".scrypted"                             # NVR/camera caches
+    ".frigate/model_cache"                  # Frigate AI model caches
+    "*.db-wal"                              # SQLite WAL files
+    "*.db-shm"                              # SQLite shared memory files
+    "*.js.map"                              # JS source maps
 )
 
-# --- 5. Source inventory (size estimation) -----------------------------------
-# Note: du doesn't accept tar-style --exclude flags; sizes are pre-exclusion estimates.
-TOTAL_SOURCE_SIZE_KB=0
+# Build tar and rsync exclude flag arrays from the single pattern list
+EXCLUDES=()
+RSYNC_EXCLUDES=()
+for pattern in "${EXCLUDE_PATTERNS[@]}"; do
+    if [[ "$pattern" == \** ]]; then
+        EXCLUDES+=( --exclude="$pattern" )
+    else
+        EXCLUDES+=( --exclude="*/${pattern}" )
+    fi
+    RSYNC_EXCLUDES+=( --exclude="$pattern" )
+done
+
+# --- 5. Source inventory (post-exclusion size via rsync dry-run) -------------
+TOTAL_SOURCE_SIZE_BYTES=0
 BACKUP_FILES=()
 
-log_msg "Source inventory:"
+log_msg "Source inventory (post-exclusion):"
 for dir in "${SOURCES[@]}"; do
     if [ -d "$dir" ]; then
         set +e
-        size_bytes=$(tar --warning=no-file-changed \
-                        --ignore-failed-read \
-                        "${EXCLUDES[@]}" \
-                        -C / --list --verbose \
-                        "${dir#/}" 2>/dev/null \
-                    | awk '{sum += $3} END {print sum+0}')
+        size_bytes=$(rsync --dry-run --recursive --stats \
+                        "${RSYNC_EXCLUDES[@]}" \
+                        "${dir}/" /tmp/fake/ 2>/dev/null \
+                    | awk '/Total file size/ {gsub(/,/,"",$4); print $4}')
         set -e
-        TOTAL_SOURCE_SIZE_KB=$(( TOTAL_SOURCE_SIZE_KB + (size_bytes / 1024) ))
+        size_bytes=${size_bytes:-0}
+        TOTAL_SOURCE_SIZE_BYTES=$(( TOTAL_SOURCE_SIZE_BYTES + size_bytes ))
         human_size=$(numfmt --to=iec --suffix=B --format="%.1f" "$size_bytes")
-        log_msg "  [+] $dir (${human_size}, post-exclusion)"
+        log_msg "  [+] $dir (${human_size})"
         BACKUP_FILES+=( "${dir#/}" )
     else
         log_msg "  [!] Skipping $dir (not found)"
@@ -255,19 +265,20 @@ if [ -d "$HA_BACKUP_DIR" ]; then
     fi
 
     log_msg "Pruning old HA backups from GDrive..."
-    rclone --config "$RCLONE_CONF" delete "$GDRIVE_HA_DAILY"   --min-age 7d   >> "$LOG_FILE" 2>&1
-    rclone --config "$RCLONE_CONF" delete "$GDRIVE_HA_WEEKLY"  --min-age 31d  >> "$LOG_FILE" 2>&1
-    rclone --config "$RCLONE_CONF" delete "$GDRIVE_HA_MONTHLY" --min-age 90d  >> "$LOG_FILE" 2>&1
+    rclone --config "$RCLONE_CONF" delete "$GDRIVE_HA_DAILY"   --min-age 7d  >> "$LOG_FILE" 2>&1
+    rclone --config "$RCLONE_CONF" delete "$GDRIVE_HA_WEEKLY"  --min-age 31d >> "$LOG_FILE" 2>&1
+    rclone --config "$RCLONE_CONF" delete "$GDRIVE_HA_MONTHLY" --min-age 90d >> "$LOG_FILE" 2>&1
 fi
 
 # --- 12. Stats ---------------------------------------------------------------
 if [ -f "${PRIMARY_HDD}/${ARCHIVE}" ]; then
     final_size_kb=$(du -sk "${PRIMARY_HDD}/${ARCHIVE}" | cut -f1)
-    pretty_source=$(numfmt --to=iec --suffix=B --format="%.1f" $((TOTAL_SOURCE_SIZE_KB * 1024)))
-    pretty_final=$(numfmt --to=iec --suffix=B --format="%.1f" $((final_size_kb * 1024)))
-    ratio=$(echo "scale=1; ($final_size_kb / $TOTAL_SOURCE_SIZE_KB) * 100" | bc)
+    final_size_bytes=$(( final_size_kb * 1024 ))
+    pretty_source=$(numfmt --to=iec --suffix=B --format="%.1f" "$TOTAL_SOURCE_SIZE_BYTES")
+    pretty_final=$(numfmt --to=iec --suffix=B --format="%.1f" "$final_size_bytes")
+    ratio=$(echo "scale=1; ($final_size_bytes / $TOTAL_SOURCE_SIZE_BYTES) * 100" | bc)
     log_msg "-------------------------------------------------------"
-    log_msg "Stats | Source: $pretty_source | Archive: $pretty_final | Compression: ${ratio}%"
+    log_msg "Stats | Source: $pretty_source | Archive: $pretty_final | Compression ratio: ${ratio}%"
 fi
 
 END_TIME=$(date +%s)
