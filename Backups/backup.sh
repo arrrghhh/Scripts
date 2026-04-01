@@ -1,7 +1,7 @@
 #!/bin/bash
 # =============================================================================
 # backup.sh — Multi-tier backup: local HDD + GDrive GFS rotation
-#             Daily x7 | Weekly x4 (Sun) | Monthly x6 (1st)
+#             Daily x7 | Weekly x4 (Sun) | Monthly x12 (1st)
 # =============================================================================
 set -uo pipefail
 
@@ -171,7 +171,7 @@ if [ -d "$PRIMARY_BASE" ]; then
     log_msg "Pruning GDrive tiers..."
     rclone --config "$RCLONE_CONF" delete "$GDRIVE_DAILY"   --min-age 7d   >> "$LOG_FILE" 2>&1
     rclone --config "$RCLONE_CONF" delete "$GDRIVE_WEEKLY"  --min-age 31d  >> "$LOG_FILE" 2>&1
-    rclone --config "$RCLONE_CONF" delete "$GDRIVE_MONTHLY" --min-age 185d >> "$LOG_FILE" 2>&1
+    rclone --config "$RCLONE_CONF" delete "$GDRIVE_MONTHLY" --min-age 365d >> "$LOG_FILE" 2>&1
 
     # Prune local HDD copies older than 7 days
     log_msg "Pruning local HDD backups older than 7 days..."
@@ -223,11 +223,34 @@ fi
 
 # --- 11. Home Assistant backup sync ------------------------------------------
 HA_BACKUP_DIR="/home/arrrghhh/.homeassistant/backups/"
+GDRIVE_HA_DAILY="${GDRIVE_DAILY}/HA"
+GDRIVE_HA_WEEKLY="${GDRIVE_WEEKLY}/HA"
+GDRIVE_HA_MONTHLY="${GDRIVE_MONTHLY}/HA"
+
 if [ -d "$HA_BACKUP_DIR" ]; then
-    log_msg "Syncing latest HA backup to GDrive (max-age 24h)..."
+    log_msg "Syncing latest HA backup to GDrive daily (${GDRIVE_HA_DAILY})..."
     rclone --config "$RCLONE_CONF" \
-        copy "$HA_BACKUP_DIR" "gdrive:Backups/HA_Direct" \
+        copy "$HA_BACKUP_DIR" "$GDRIVE_HA_DAILY" \
         --max-age 24h --log-level ERROR >> "$LOG_FILE" 2>&1
+
+    if [ "$DOW" = "7" ]; then
+        log_msg "Sunday — copying HA backup to weekly (${GDRIVE_HA_WEEKLY})..."
+        rclone --config "$RCLONE_CONF" \
+            copy "$HA_BACKUP_DIR" "$GDRIVE_HA_WEEKLY" \
+            --max-age 24h --log-level ERROR >> "$LOG_FILE" 2>&1
+    fi
+
+    if [ "$DOM" = "01" ]; then
+        log_msg "1st of month — copying HA backup to monthly (${GDRIVE_HA_MONTHLY})..."
+        rclone --config "$RCLONE_CONF" \
+            copy "$HA_BACKUP_DIR" "$GDRIVE_HA_MONTHLY" \
+            --max-age 24h --log-level ERROR >> "$LOG_FILE" 2>&1
+    fi
+
+    log_msg "Pruning old HA backups from GDrive..."
+    rclone --config "$RCLONE_CONF" delete "$GDRIVE_HA_DAILY"   --min-age 7d   >> "$LOG_FILE" 2>&1
+    rclone --config "$RCLONE_CONF" delete "$GDRIVE_HA_WEEKLY"  --min-age 31d  >> "$LOG_FILE" 2>&1
+    rclone --config "$RCLONE_CONF" delete "$GDRIVE_HA_MONTHLY" --min-age 90d  >> "$LOG_FILE" 2>&1
 fi
 
 # --- 12. Stats ---------------------------------------------------------------
