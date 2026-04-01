@@ -98,12 +98,14 @@ BACKUP_FILES=()
 log_msg "Source inventory:"
 for dir in "${SOURCES[@]}"; do
     if [ -d "$dir" ]; then
+        set +e
         size_bytes=$(tar --warning=no-file-changed \
                         --ignore-failed-read \
                         "${EXCLUDES[@]}" \
                         -C / --list --verbose \
                         "${dir#/}" 2>/dev/null \
                     | awk '{sum += $3} END {print sum+0}')
+        set -e
         TOTAL_SOURCE_SIZE_KB=$(( TOTAL_SOURCE_SIZE_KB + (size_bytes / 1024) ))
         human_size=$(numfmt --to=iec --suffix=B --format="%.1f" "$size_bytes")
         log_msg "  [+] $dir (${human_size}, post-exclusion)"
