@@ -209,7 +209,7 @@ if [ -d "$PRIMARY_BASE" ]; then
     fi
 
     # GDrive pruning
-    log_msg "Pruning GDrive daily (>${7}d)..."
+    log_msg "Pruning GDrive daily (>7d)..."
     prune_rclone "$GDRIVE_DAILY" "7d"
 
     log_msg "Pruning GDrive weekly (>31d)..."
