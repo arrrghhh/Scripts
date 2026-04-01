@@ -44,11 +44,35 @@ fi
 trap 'rm -f "$LOCK_FILE"' EXIT
 touch "$LOCK_FILE"
 
-# --- 3. Logging helper -------------------------------------------------------
+# --- 3. Logging helpers ------------------------------------------------------
 log_msg() { echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"; }
 
 # Trap unexpected errors and report line number
 trap 'log_msg "ERROR: Unexpected failure at line ${LINENO}. Exiting."; exit 1' ERR
+
+# Prune a local directory: log then delete files matching pattern older than N days
+prune_local() {
+    local dir="$1" pattern="$2" days="$3"
+    local found=false
+    while IFS= read -r f; do
+        log_msg "  [pruning] $f"
+        found=true
+    done < <(find "$dir" -name "$pattern" -mtime +"$days")
+    find "$dir" -name "$pattern" -mtime +"$days" -delete
+    $found || log_msg "  (nothing to prune)"
+}
+
+# Prune a GDrive remote: log then delete files older than age string
+prune_rclone() {
+    local remote="$1" age="$2"
+    local found=false
+    while IFS= read -r f; do
+        log_msg "  [pruning] ${remote}/${f}"
+        found=true
+    done < <(rclone --config "$RCLONE_CONF" lsf "$remote" --min-age "$age" 2>/dev/null)
+    rclone --config "$RCLONE_CONF" delete "$remote" --min-age "$age" >> "$LOG_FILE" 2>&1
+    $found || log_msg "  (nothing to prune)"
+}
 
 log_msg "========================================================"
 log_msg "Starting backup for node: $NODE"
@@ -185,14 +209,18 @@ if [ -d "$PRIMARY_BASE" ]; then
     fi
 
     # GDrive pruning
-    log_msg "Pruning GDrive tiers..."
-    rclone --config "$RCLONE_CONF" delete "$GDRIVE_DAILY"   --min-age 7d   >> "$LOG_FILE" 2>&1
-    rclone --config "$RCLONE_CONF" delete "$GDRIVE_WEEKLY"  --min-age 31d  >> "$LOG_FILE" 2>&1
-    rclone --config "$RCLONE_CONF" delete "$GDRIVE_MONTHLY" --min-age 365d >> "$LOG_FILE" 2>&1
+    log_msg "Pruning GDrive daily (>${7}d)..."
+    prune_rclone "$GDRIVE_DAILY" "7d"
+
+    log_msg "Pruning GDrive weekly (>31d)..."
+    prune_rclone "$GDRIVE_WEEKLY" "31d"
+
+    log_msg "Pruning GDrive monthly (>185d)..."
+    prune_rclone "$GDRIVE_MONTHLY" "185d"
 
     # Prune local HDD copies older than 7 days
-    log_msg "Pruning local HDD backups older than 7 days..."
-    find "$PRIMARY_HDD" -name "${NODE}-backup-*.tgz" -mtime +7 -delete
+    log_msg "Pruning local HDD backups (>7d)..."
+    prune_local "$PRIMARY_HDD" "${NODE}-backup-*.tgz" 7
 
     # --- 9. Cross-node push (skips self) -------------------------------------
     for TARGET in "${NODES[@]}"; do
@@ -224,9 +252,14 @@ else
             --log-level ERROR >> "$LOG_FILE" 2>&1
     fi
 
-    rclone --config "$RCLONE_CONF" delete "$GDRIVE_DAILY"   --min-age 7d   >> "$LOG_FILE" 2>&1
-    rclone --config "$RCLONE_CONF" delete "$GDRIVE_WEEKLY"  --min-age 31d  >> "$LOG_FILE" 2>&1
-    rclone --config "$RCLONE_CONF" delete "$GDRIVE_MONTHLY" --min-age 185d >> "$LOG_FILE" 2>&1
+    log_msg "Pruning GDrive daily (>7d)..."
+    prune_rclone "$GDRIVE_DAILY" "7d"
+
+    log_msg "Pruning GDrive weekly (>31d)..."
+    prune_rclone "$GDRIVE_WEEKLY" "31d"
+
+    log_msg "Pruning GDrive monthly (>185d)..."
+    prune_rclone "$GDRIVE_MONTHLY" "185d"
 fi
 
 # Safety net: remove temp archive if it wasn't consumed
@@ -234,8 +267,8 @@ rm -f "${LOCAL_TEMP}/${ARCHIVE}"
 
 # --- 10. Cross-backup pruning (incoming archives on this node) ---------------
 if [ -d "$CROSS_PATH" ]; then
-    log_msg "Pruning old incoming cross-backups (>14 days)..."
-    find "$CROSS_PATH" -name "*.tgz" -mtime +14 -delete
+    log_msg "Pruning incoming cross-backups (>14d)..."
+    prune_local "$CROSS_PATH" "*.tgz" 14
 fi
 
 # --- 11. Home Assistant backup sync ------------------------------------------
@@ -264,10 +297,14 @@ if [ -d "$HA_BACKUP_DIR" ]; then
             --max-age 24h --log-level ERROR >> "$LOG_FILE" 2>&1
     fi
 
-    log_msg "Pruning old HA backups from GDrive..."
-    rclone --config "$RCLONE_CONF" delete "$GDRIVE_HA_DAILY"   --min-age 7d  >> "$LOG_FILE" 2>&1
-    rclone --config "$RCLONE_CONF" delete "$GDRIVE_HA_WEEKLY"  --min-age 31d >> "$LOG_FILE" 2>&1
-    rclone --config "$RCLONE_CONF" delete "$GDRIVE_HA_MONTHLY" --min-age 90d >> "$LOG_FILE" 2>&1
+    log_msg "Pruning GDrive HA daily (>7d)..."
+    prune_rclone "$GDRIVE_HA_DAILY" "7d"
+
+    log_msg "Pruning GDrive HA weekly (>31d)..."
+    prune_rclone "$GDRIVE_HA_WEEKLY" "31d"
+
+    log_msg "Pruning GDrive HA monthly (>90d)..."
+    prune_rclone "$GDRIVE_HA_MONTHLY" "90d"
 fi
 
 # --- 12. Stats ---------------------------------------------------------------
