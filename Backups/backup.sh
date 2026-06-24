@@ -84,7 +84,6 @@ SOURCES=(
     "/etc"
     "/usr/local/bin"
     "/var/spool/cron"
-    "/media/complete/sabnzbd"
 )
 
 # Single source of truth for exclude patterns.
