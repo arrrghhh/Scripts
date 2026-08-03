@@ -187,12 +187,18 @@ prune_local() {
 # depth against ever touching sibling/nested folders.
 prune_rclone() {
     local remote="$1" pattern="$2" age="$3"
-    local found=false f
+    local found=false f listing
+    # Skip tiers that don't exist yet (e.g. weekly/monthly outside their
+    # promotion day, or an empty HA tier) — rclone delete would error out.
+    if ! listing="$(rclone --config "$RCLONE_CONF" lsf "$remote" --files-only --max-depth 1 \
+                --include "$pattern" --min-age "$age" 2>/dev/null)"; then
+        log_msg "  (tier not found — skipping ${remote})"
+        return 0
+    fi
     while IFS= read -r f; do
         log_msg "  [prune] ${remote}/${f}"
         found=true
-    done < <(rclone --config "$RCLONE_CONF" lsf "$remote" --files-only --max-depth 1 \
-                --include "$pattern" --min-age "$age" 2>/dev/null)
+    done <<<"$listing"
     if rclone --config "$RCLONE_CONF" delete "$remote" --max-depth 1 \
             --include "$pattern" --min-age "$age" >>"$LOG_FILE" 2>&1; then
         $found || log_msg "  (nothing to prune)"
