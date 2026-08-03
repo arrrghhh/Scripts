@@ -1,0 +1,12 @@
+[Unit]
+Description=Daily node backup timer
+
+[Timer]
+# Runs once per day; the script itself decides weekly (Sun) / monthly (1st)
+# promotion from the current date.
+OnCalendar=*-*-* 02:30:00
+Persistent=true
+RandomizedDelaySec=15m
+
+[Install]
+WantedBy=timers.target
