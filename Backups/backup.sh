@@ -196,6 +196,7 @@ prune_rclone() {
         return 0
     fi
     while IFS= read -r f; do
+        [ -n "$f" ] || continue
         log_msg "  [prune] ${remote}/${f}"
         found=true
     done <<<"$listing"
