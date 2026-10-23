@@ -379,3 +379,12 @@ if [ "$IS_MONTHLY" = "1" ]; then
     fi
     find "$ARCHIVE_DIR" -name '*.tgz' -mtime +365 -delete
 fi
+
+# --- Exit status --------------------------------------------------------------
+# Failures above are recorded in FAILED but never propagated, so systemd used to
+# report a unit success (status 0) while rclone uploads had silently failed.
+# Propagate them so backup.service shows up in `systemctl --failed`.
+if [ "$FAILED" = "1" ]; then
+    exit 1
+fi
+exit 0
