@@ -1,0 +1,32 @@
+name: docker
+services:
+  pihole:
+    container_name: pihole
+    image: pihole/pihole:latest
+    network_mode: bridge
+    ports:
+      - "192.168.0.10:53:53/tcp"
+      - "192.168.0.10:53:53/udp"
+      - "82:80/tcp"
+      - "9443:443/tcp"
+    environment:
+      TZ: 'America/Denver'
+      WEBPASSWORD: '${WEBPASSWORD:?WEBPASSWORD missing from .env}'
+    volumes:
+      - '/home/arrrghhh/.pihole/etc-pihole/:/etc/pihole/'
+      - '/home/arrrghhh/.pihole/etc-dnsmasq.d/:/etc/dnsmasq.d/'
+    restart: unless-stopped
+  npm:
+    image: 'jc21/nginx-proxy-manager:latest'
+    container_name: npm
+    restart: unless-stopped
+    ports:
+      - '80:80'
+      - '81:81'
+      - '443:443'
+    environment:
+      - PUID=1000
+      - PGID=1000
+    volumes:
+      - /home/arrrghhh/.nginxproxmgr:/data
+      - /home/arrrghhh/.letsencrypt:/etc/letsencrypt

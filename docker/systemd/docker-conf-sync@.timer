@@ -1,0 +1,11 @@
+[Unit]
+Description=Periodically sync Docker Compose config for %i
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=10min
+Persistent=true
+Unit=docker-conf-sync@%i.service
+
+[Install]
+WantedBy=timers.target

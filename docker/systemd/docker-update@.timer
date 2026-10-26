@@ -1,0 +1,10 @@
+[Unit]
+Description=Trigger Docker Update Daily for %i
+
+[Timer]
+OnCalendar=*-*-* 00:00:00 America/Denver
+Persistent=true
+Unit=docker-update@%i.service
+
+[Install]
+WantedBy=timers.target

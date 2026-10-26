@@ -1,0 +1,16 @@
+[Unit]
+Description=Run Docker Update Script for %i
+Wants=network-online.target
+After=network-online.target local-fs.target
+# Alerts: add OnFailure= once an alerting channel is chosen.
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/bin/bash /home/arrrghhh/docker-compose/docker/dockerupdate.sh %i
+TimeoutStartSec=infinity
+Nice=10
+IOSchedulingClass=2
+
+[Install]
+WantedBy=multi-user.target

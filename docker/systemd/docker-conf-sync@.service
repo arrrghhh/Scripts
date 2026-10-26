@@ -1,0 +1,13 @@
+[Unit]
+Description=Sync Docker Compose config for %i from git
+Wants=network-online.target
+After=network-online.target
+# Alerts: add OnFailure= once an alerting channel is chosen.
+
+[Service]
+Type=oneshot
+User=root
+ExecStart=/bin/bash /home/arrrghhh/docker-compose/docker/conf-sync.sh %i
+TimeoutStartSec=180
+Nice=10
+IOSchedulingClass=2
