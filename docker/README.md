@@ -82,6 +82,10 @@ sudo systemctl enable --now docker-update@<Endpoint>.timer
 
 Remove the old non-templated `docker-update.service` / `.timer` if present.
 
+The units run as `arrrghhh` (a member of the `docker` group), **not** root. Running
+`git fetch`/`merge` as root would leave `.git/index`, `FETCH_HEAD` and any new files
+root-owned, breaking normal git use in the checkout.
+
 ## How a change propagates
 
 1. `docker-conf-sync@<Endpoint>.timer` fires every 10 minutes.

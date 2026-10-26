@@ -10,7 +10,7 @@ set -euo pipefail
 ENDPOINT="${1:?usage: conf-sync.sh <endpoint>}"
 REPO="/home/arrrghhh/docker-compose"
 DIR="$REPO/docker/$ENDPOINT"
-LOCK="/run/lock/docker-conf-sync.lock"
+LOCK="$REPO/.git/docker-conf-sync.lock"
 
 export GIT_TERMINAL_PROMPT=0
 

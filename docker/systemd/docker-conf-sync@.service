@@ -6,7 +6,8 @@ After=network-online.target
 
 [Service]
 Type=oneshot
-User=root
+User=arrrghhh
+Group=arrrghhh
 ExecStart=/bin/bash /home/arrrghhh/docker-compose/docker/conf-sync.sh %i
 TimeoutStartSec=180
 Nice=10
