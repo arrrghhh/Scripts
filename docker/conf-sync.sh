@@ -1,14 +1,15 @@
 #!/bin/bash
-# conf-sync.sh <endpoint> — fetch, validate, then fast-forward the compose checkout.
+# conf-sync.sh <endpoint> — fetch, validate, then fast-forward the shared checkout.
 #
 # A broken commit can never take an endpoint down: the candidate compose file is
-# syntax/interpolation-checked with the live .env before the checkout moves.
+# syntax/interpolation-checked with the live .env before the checkout moves, and
+# the scripts the units execute are syntax-checked too.
 # No Google Drive / FUSE involvement anywhere.
 
 set -euo pipefail
 
 ENDPOINT="${1:?usage: conf-sync.sh <endpoint>}"
-REPO="/home/arrrghhh/docker-compose"
+REPO="/home/arrrghhh/Scripts"
 DIR="$REPO/docker/$ENDPOINT"
 LOCK="$REPO/.git/docker-conf-sync.lock"
 
@@ -36,6 +37,7 @@ trap 'rm -rf "$tmp"' EXIT
 
 git -C "$REPO" show "origin/main:docker/$ENDPOINT/docker-compose.yml" > "$tmp/docker-compose.yml"
 git -C "$REPO" show "origin/main:docker/dockerupdate.sh"            > "$tmp/dockerupdate.sh"
+git -C "$REPO" show "origin/main:Backups/backup.sh"                 > "$tmp/backup.sh"
 
 if ! docker compose -f "$tmp/docker-compose.yml" --env-file "$DIR/.env" config -q; then
   log "ERROR: candidate compose for $ENDPOINT is invalid; keeping current files"
@@ -44,6 +46,11 @@ fi
 
 if ! bash -n "$tmp/dockerupdate.sh"; then
   log "ERROR: candidate dockerupdate.sh has a syntax error; keeping current files"
+  exit 1
+fi
+
+if ! bash -n "$tmp/backup.sh"; then
+  log "ERROR: candidate Backups/backup.sh has a syntax error; keeping current files"
   exit 1
 fi
 

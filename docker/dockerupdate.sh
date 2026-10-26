@@ -4,7 +4,7 @@
 # that previously aborted the whole run and left containers stuck on old images.
 #
 # Invoked by docker-update@.service with the endpoint name, e.g.:
-#   /bin/bash /home/arrrghhh/docker-compose/docker/dockerupdate.sh usrv
+#   /bin/bash /home/arrrghhh/Scripts/docker/dockerupdate.sh usrv
 
 set -u
 

@@ -45,23 +45,39 @@ instead of silently starting pihole with an empty admin password.
 
 ## Host layout
 
+One clone per host, shared by the backup timer and the compose sync:
+
 ```
-/home/arrrghhh/docker-compose/                      # git clone of Scripts.git
+/home/arrrghhh/Scripts/                       # the only clone of Scripts.git
+├── Backups/backup.sh                         # executed by backup.service
 └── docker/<Endpoint>/docker-compose.yml
-    docker/<Endpoint>/.env                   # mode 600, gitignored
+    docker/<Endpoint>/.env                    # mode 600, gitignored
 ```
+
 `/home/arrrghhh` is covered by `backup.timer`, so `.env` rides along in the backup —
-it is the one file that cannot be recovered from git.
+it is the one file that cannot be recovered from git (the archive excludes `.git`).
+
+`backup.service` must therefore run `/home/arrrghhh/Scripts/Backups/backup.sh`.
 
 ## Bootstrap / re-bootstrap a host
 
+The clone already exists on each host. Migrating from the old `backup-repo` layout:
+
 ```bash
-git clone https://github.com/arrrghhh/Scripts.git /home/arrrghhh/docker-compose
-# create /home/arrrghhh/docker-compose/docker/<Endpoint>/.env, mode 600, with the keys above
-chmod 600 /home/arrrghhh/docker-compose/docker/<Endpoint>/.env
+mv /home/arrrghhh/backup-repo /home/arrrghhh/Scripts
+git -C /home/arrrghhh/Scripts fetch origin
+git -C /home/arrrghhh/Scripts reset --hard origin/main   # only if the clone diverged
+```
+
+A genuinely fresh host:
+
+```bash
+git clone https://github.com/arrrghhh/Scripts.git /home/arrrghhh/Scripts
+# create /home/arrrghhh/Scripts/docker/<Endpoint>/.env, mode 600, with the keys above
+chmod 600 /home/arrrghhh/Scripts/docker/<Endpoint>/.env
 
 # validate before touching containers
-cd /home/arrrghhh/docker-compose/docker/<Endpoint>
+cd /home/arrrghhh/Scripts/docker/<Endpoint>
 docker compose config -q
 
 # recreate in place — same project name + container_name means no duplicates
@@ -75,6 +91,11 @@ sudo cp docker/systemd/docker-conf-sync@.service \
         docker/systemd/docker-conf-sync@.timer \
         docker/systemd/docker-update@.service \
         docker/systemd/docker-update@.timer /etc/systemd/system/
+
+# point the backup unit at the shared clone
+sudo sed -i 's#^ExecStart=/bin/bash /home/arrrghhh/backup-repo/#ExecStart=/bin/bash /home/arrrghhh/Scripts/#' /etc/systemd/system/backup.service
+grep -n '^ExecStart=' /etc/systemd/system/backup.service
+
 sudo systemctl daemon-reload
 sudo systemctl enable --now docker-conf-sync@<Endpoint>.timer
 sudo systemctl enable --now docker-update@<Endpoint>.timer
@@ -90,18 +111,21 @@ root-owned, breaking normal git use in the checkout.
 
 1. `docker-conf-sync@<Endpoint>.timer` fires every 10 minutes.
 2. `conf-sync.sh` fetches `origin/main`, renders the **candidate** compose against
-   the live `.env`, and runs `docker compose config -q` plus `bash -n` on the
-   update script.
-3. Only if both pass does it `git merge --ff-only origin/main`.
+   the live `.env`, and runs `docker compose config -q`, plus `bash -n` on
+   `docker/dockerupdate.sh` and `Backups/backup.sh`.
+3. Only if all pass does it `git merge --ff-only origin/main`.
 
 A broken commit is rejected, the previous files stay live, and the unit fails
 visibly. Files are updated within 10 minutes; containers pick them up at the next
 `docker-update` run (00:00 America/Denver) or a manual `docker compose up -d`.
 
+Note that this also advances `Backups/backup.sh`; syntax is checked, but a
+semantically bad change takes effect at the next `backup.timer` run.
+
 ## Revert
 
 ```bash
-cd /home/arrrghhh/docker-compose
+cd /home/arrrghhh/Scripts
 git log --oneline -- docker/<Endpoint>
 git revert <bad-commit>   # or: git reset --hard <good-commit> — then push
 ```
@@ -114,4 +138,8 @@ is an ancestor of `origin/main`; otherwise the sync unit will report divergence.
 
 Both `docker-conf-sync@.service` and `docker-update@.service` currently have **no
 `OnFailure=`**. The Oct 2026 incident (nine silent nightly failures) is exactly
-what that allows. Add the same alert hook used for backups once one exists.
+what that allows.
+
+`Backups/backup.sh` has a `send_alert()` helper, but it is inert: `ALERT_TO` is
+empty and no `mail`/`sendmail` binary is installed. Reuse that hook once a real
+channel exists.
