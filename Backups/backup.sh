@@ -135,16 +135,25 @@ record_failure() { FAILED=1; log_msg "  [FAIL] $1"; }
 
 send_alert() {
     local subject="$1" body="$2"
-    [ -n "$ALERT_TO" ] || return 0
-    if command -v mail >/dev/null 2>&1; then
-        printf '%s\n' "$body" | mail -s "$subject" "$ALERT_TO" 2>/dev/null \
-            || log_msg "  [WARN] could not send alert via mail"
-    elif command -v sendmail >/dev/null 2>&1; then
-        { printf 'To: %s\nSubject: %s\n\n%s\n' "$ALERT_TO" "$subject" "$body"; } | sendmail -t 2>/dev/null \
-            || log_msg "  [WARN] could not send alert via sendmail"
-    else
-        log_msg "  [WARN] no mail/sendmail available to send alert '$subject'"
-    fi
+    local ep
+    case "$(hostname -s)" in
+        usrv) ep="usrv" ;;
+        nas) ep="Lakewood" ;;
+        summitserver) ep="SummitHouse" ;;
+        *) ep="$(hostname -s)" ;;
+    esac
+    [ -n "${ALERT_TO:-}" ] && {
+        if command -v mail >/dev/null 2>&1; then
+            printf '%s\n' "$body" | mail -s "$subject" "$ALERT_TO" 2>/dev/null \
+                || log_msg "  [WARN] could not send alert via mail"
+        elif command -v sendmail >/dev/null 2>&1; then
+            { printf 'To: %s\nSubject: %s\n\n%s\n' "$ALERT_TO" "$subject" "$body"; } | sendmail -t 2>/dev/null \
+                || log_msg "  [WARN] could not send alert via sendmail"
+        else
+            log_msg "  [WARN] no mail/sendmail available to send alert '$subject'"
+        fi
+    }
+    /bin/bash "/home/arrrghhh/Scripts/docker/notify.sh" "$ep" "$subject" "$body" || true
 }
 
 die() {
