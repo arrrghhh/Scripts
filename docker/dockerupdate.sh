@@ -34,18 +34,21 @@ if [ ! -f "$COMPOSE" ]; then
   exit 1
 fi
 
-ATTEMPTS=3
-SLEEP=60
+ATTEMPTS=4
+BASE_SLEEP=30
 
 pull_ok=0
 for i in $(seq 1 "$ATTEMPTS"); do
   echo "[$(date -u +%FT%TZ)] pull attempt $i/$ATTEMPTS"
-  if docker compose -f "$COMPOSE" pull --quiet; then
+  if docker compose -f "$COMPOSE" pull --quiet 2>&1 | tail -5; then
     pull_ok=1
     break
   fi
-  echo "[$(date -u +%FT%TZ)] pull attempt $i failed; sleeping ${SLEEP}s"
-  sleep "$SLEEP"
+  if [ $i -lt $ATTEMPTS ]; then
+    SLEEP=$((BASE_SLEEP * (2 ** (i - 1))))
+    echo "[$(date -u +%FT%TZ)] pull attempt $i failed; sleeping ${SLEEP}s (exponential backoff)"
+    sleep "$SLEEP"
+  fi
 done
 
 echo "[$(date -u +%FT%TZ)] docker compose up"
