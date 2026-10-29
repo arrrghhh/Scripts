@@ -141,28 +141,36 @@ services:
   #   network_mode: host
   #   volumes:
   #     - /home/arrrghhh/.govee2mqtt:/data
-  # nginxproxmgr:
-  #   image: 'jc21/nginx-proxy-manager:latest'
-  #   restart: unless-stopped
-  #   ports:
-  #     # These ports are in format <host-port>:<container-port>
-  #     - '80:80' # Public HTTP Port
-  #     - '443:443' # Public HTTPS Port
-  #     - '81:81' # Admin Web Port
-  #     # Add any other Stream port you want to expose
-  #     # - '21:21' # FTP
-
-  #   # Uncomment the next line if you uncomment anything in the section
-  #   # environment:
-  #     # Uncomment this if you want to change the location of
-  #     # the SQLite DB file within the container
-  #     # DB_SQLITE_FILE: "/data/database.sqlite"
-
-  #     # Uncomment this if IPv6 is not enabled on your host
-  #     # DISABLE_IPV6: 'true'
-  #   volumes:
-  #     - /home/arrrghhh/.nginxproxmgr:/data
-  #     - /home/arrrghhh/.letsencrypt:/etc/letsencrypt
+  pihole:
+    image: pihole/pihole:latest
+    container_name: pihole
+    network_mode: bridge
+    ports:
+      - "192.168.0.99:53:53/tcp"
+      - "192.168.0.99:53:53/udp"
+      - "82:80/tcp"
+      - "9443:443/tcp"
+    environment:
+      TZ: 'America/Denver'
+      WEBPASSWORD: '${WEBPASSWORD:?WEBPASSWORD missing from .env}'
+    volumes:
+      - '/home/arrrghhh/.pihole/etc-pihole/:/etc/pihole/'
+      - '/home/arrrghhh/.pihole/etc-dnsmasq.d/:/etc/dnsmasq.d/'
+    restart: unless-stopped
+  npm:
+    image: 'jc21/nginx-proxy-manager:latest'
+    container_name: npm
+    restart: unless-stopped
+    ports:
+      - '80:80' # Public HTTP Port
+      - '443:443' # Public HTTPS Port
+      - '81:81' # Admin Web Port
+    environment:
+      - PUID=1000
+      - PGID=1000
+    volumes:
+      - /home/arrrghhh/.nginxproxmgr:/data
+      - /home/arrrghhh/.letsencrypt:/etc/letsencrypt
 
   prowlarr:
     image: lscr.io/linuxserver/prowlarr:latest
