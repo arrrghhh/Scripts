@@ -58,7 +58,7 @@ RET_CROSS=14    # days, incoming cross-backups
 ALERT_TO=""
 
 # SSH aliases of the other backup nodes (defined in /root/.ssh/config).
-NODES=(summitserver nas usrv)
+NODES=(summitserver nas)
 
 # Directories to back up. The archive is created with `tar -C /`, so these
 # are the top-level path components stored in the archive.
