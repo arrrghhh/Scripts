@@ -1,3 +1,4 @@
+# /etc/systemd/system/docker-update@.service
 [Unit]
 Description=Run Docker Update Script for %i
 Wants=network-online.target
@@ -8,6 +9,10 @@ After=network-online.target local-fs.target
 Type=oneshot
 User=arrrghhh
 Group=arrrghhh
+# Creates /var/log/docker-update owned by the service user (no manual chown);
+# dockerupdate.sh writes one timestamped log file per run there.
+LogsDirectory=docker-update
+LogsDirectoryMode=0750
 ExecStart=/bin/bash /home/arrrghhh/Scripts/docker/dockerupdate.sh %i
 TimeoutStartSec=infinity
 Nice=10

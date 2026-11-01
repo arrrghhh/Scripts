@@ -122,6 +122,35 @@ visibly. Files are updated within 10 minutes; containers pick them up at the nex
 Note that this also advances `Backups/backup.sh`; syntax is checked, but a
 semantically bad change takes effect at the next `backup.timer` run.
 
+## Logs
+
+Each run writes its own log file, named by UTC start time:
+
+```
+/var/log/docker-update/2026-11-01T060001Z.log
+/var/log/docker-update/latest.log        # symlink to the newest run
+```
+
+`LogsDirectory=docker-update` in `docker-update@.service` creates the directory
+owned by `arrrghhh`, so it survives reboots and needs no manual `chown`. If a host
+is still running the older unit, the script warns once and falls back to the
+journal. Run logs older than 90 days are pruned on each start
+(`LOG_RETENTION_DAYS`).
+
+Output still goes to the journal as well, which is handy for correlating with
+systemd's own messages:
+
+```bash
+journalctl -u docker-update@<Endpoint>.service --since yesterday
+cat /var/log/docker-update/latest.log
+grep -l toomanyrequests /var/log/docker-update/*.log
+```
+
+Note: `dockerupdate.sh` runs `set -uo pipefail`. The pull check is
+`docker compose ... pull --quiet 2>&1 | tail -5`; without `pipefail` that pipeline
+returns `tail`'s status, so a failed pull reports success and the retry/backoff
+logic never runs (the Oct 2026 regression). Keep `pipefail` if you edit it.
+
 ## Revert
 
 ```bash
