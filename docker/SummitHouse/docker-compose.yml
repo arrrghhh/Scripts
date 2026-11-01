@@ -167,12 +167,7 @@ services:
       volumes:
         - /home/arrrghhh/.xcel_itron2mqtt/certs:/opt/xcel_itron2mqtt/certs
       #network_mode: host
-      networks:
-        - summithouse_default
       environment:
         - MQTT_SERVER=mosquitto
         - METER_IP=192.168.1.80
         - METER_PORT=8081
-networks:
-  summithouse_default:
-    external: true
