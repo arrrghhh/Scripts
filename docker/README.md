@@ -165,9 +165,20 @@ is an ancestor of `origin/main`; otherwise the sync unit will report divergence.
 
 ## Alerting
 
-Both `docker-conf-sync@.service` and `docker-update@.service` currently have **no
-`OnFailure=`**. The Oct 2026 incident (nine silent nightly failures) is exactly
-what that allows.
+Failures call `notify.sh <endpoint> <subject> <body>`, which pushes via Home
+Assistant (`HA_URL`, `HA_TOKEN_FILE`, `HA_NOTIFY_TARGET`) and falls back to SMTP
+(`SMTP_*`, `ALERT_TO`). It is opt-in per endpoint: without
+`docker/<Endpoint>/alert.env` (gitignored) it exits 0 silently.
+
+A failed send is never silent. The reason goes to stderr — for `docker-update`
+that means the per-run log in `/var/log/docker-update` — and the script exits 1.
+So `no alert channel succeeded` in a run log means the *alert* broke, not the
+update.
+
+Both `docker-conf-sync@.service` and `docker-update@.service` still have **no
+`OnFailure=`**, so a unit that dies before it reaches `notify.sh` — or a crash,
+or a hung pull — is only visible in the journal. The Oct 2026 incident (nine
+silent nightly failures) is what that gap allows.
 
 `Backups/backup.sh` has a `send_alert()` helper, but it is inert: `ALERT_TO` is
 empty and no `mail`/`sendmail` binary is installed. Reuse that hook once a real
