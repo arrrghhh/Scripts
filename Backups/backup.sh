@@ -91,6 +91,7 @@ EXCLUDE_PATTERNS=(
     ".plex"                                 # Plex metadata
     ".scrypted"                             # NVR/camera caches
     ".frigate/model_cache"                  # Frigate AI model caches
+    ".frigate/logs"                         # Frigate runtime log history
     "*.db-wal"                              # SQLite WAL files
     "*.db-shm"                              # SQLite shared memory files
     "*.js.map"                              # JS source maps
