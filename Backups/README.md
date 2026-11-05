@@ -40,8 +40,9 @@ runs the backup after a missed schedule (e.g. machine off overnight).
 
 All are assumed to exist already; the script does not set them up:
 
-- `rclone` with a `gdrive` remote in
-  `/home/<LOG_RUN_USER>/.config/rclone/rclone.conf`.
+- `rclone` with a `gdrive` remote in `/root/.config/rclone/rclone.conf`
+  (the script runs as root, so it uses root's own config; see the note in
+  `backup.sh` about not sharing the config with the user's rclone mount).
 - The local HDD mounted at `/media/backup` (the script falls back to direct
   GDrive upload if it is absent).
 - SSH aliases for the other two nodes in `/root/.ssh/config`, with
@@ -54,7 +55,7 @@ Everything lives in the CONFIG section at the top of `backup.sh`:
 
 | Setting            | Default          | Notes                                   |
 |--------------------|------------------|-----------------------------------------|
-| `LOG_RUN_USER`     | `arrrghhh`       | Owner of logs and rclone/HA paths.      |
+| `LOG_RUN_USER`     | `arrrghhh`       | Owner of log and HA paths.              |
 | `PRIMARY_BASE`     | `/media/backup/…`| Local HDD root; per-node subfolder.     |
 | `SOURCES`          | `/home /etc …`   | Directories to archive.                 |
 | `EXCLUDE_PATTERNS` | (list)           | Single source of truth for tar + rsync. |

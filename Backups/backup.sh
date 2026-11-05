@@ -27,7 +27,12 @@ LOG_DIR="/var/log/backup_logs"
 LOCK_FILE="/var/run/backup_${NODE}.lock"
 LOG_RUN_USER="arrrghhh"
 
-RCLONE_CONF="/home/${LOG_RUN_USER}/.config/rclone/rclone.conf"
+# This script runs as root (backup.service: User=root). rclone rewrites its
+# config in place whenever it refreshes the OAuth token, and the file is then
+# owned by the calling user. Pointing root's rclone at the user's config would
+# flip that file to root:600 and break the unprivileged rclone-gdrive mount.
+# Keep a separate root-owned copy so the two never fight over ownership.
+RCLONE_CONF="/root/.config/rclone/rclone.conf"
 RCLONE_REMOTE="gdrive"
 
 PRIMARY_BASE="/media/backup/Backups/UbuntuServer"
