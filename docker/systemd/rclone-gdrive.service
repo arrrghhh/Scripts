@@ -1,0 +1,35 @@
+[Unit]
+Description=Rclone Google Drive Mount
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=notify
+User=arrrghhh
+Group=arrrghhh
+# Clean up pre-start
+ExecStartPre=/usr/bin/mkdir -p /media/gdrive
+# This line clears any "ghost" mounts before starting
+ExecStartPre=-/usr/bin/fusermount -uz /media/gdrive
+ExecStart=/usr/bin/rclone mount gdrive: /media/gdrive \
+    --config /home/arrrghhh/.config/rclone/rclone.conf \
+    --vfs-cache-mode full \
+    --vfs-cache-max-age 24h \
+    --vfs-cache-max-size 50G \
+    --vfs-read-chunk-size 128M \
+    --vfs-read-chunk-size-limit off \
+    --allow-other \
+    --buffer-size 32M \
+    --rc
+# Use -uz (unmount lazy) to ensure it releases the folder on stop
+ExecStop=/usr/bin/fusermount -uz /media/gdrive
+Restart=on-failure
+# Give the system 10 seconds to breathe before retrying
+RestartSec=10
+# This ensures systemd knows when the mount is actually ready
+KillMode=mixed
+RestartKillSignal=SIGTERM
+FinalKillSignal=SIGKILL
+
+[Install]
+WantedBy=multi-user.target
