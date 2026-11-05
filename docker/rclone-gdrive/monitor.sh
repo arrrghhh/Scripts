@@ -57,8 +57,12 @@ is_mounted() {
 }
 
 is_accessible() {
-    # FUSE can report "mounted" yet be wedged; a bounded ls proves liveness.
-    timeout 5 ls "$MOUNT_POINT" >/dev/null 2>&1
+    # FUSE can report "mounted" yet be wedged. A getattr on the mount root
+    # (stat) proves liveness without a full Drive readdir, which can be slow
+    # for reasons that have nothing to do with a dead mount. Generous timeout
+    # for the same reason; callers re-check before declaring a wedge.
+    local probe_timeout="${1:-20}"
+    timeout "$probe_timeout" stat "$MOUNT_POINT" >/dev/null 2>&1
 }
 
 # --- notification ----------------------------------------------------------
@@ -133,13 +137,23 @@ if ! is_mounted; then
         "rclone-gdrive mount DOWN (recovery failed)" \
         "Mount $MOUNT_POINT is absent and ${SERVICE_NAME} would not come back up."
 
-elif ! is_accessible; then
-    attempt_recovery \
-        "MOUNT PRESENT but UNRESPONSIVE at $MOUNT_POINT" \
-        "fusermount -uz $MOUNT_POINT 2>/dev/null; systemctl restart $SERVICE_NAME" \
-    || notify_on_failure \
-        "rclone-gdrive mount WEDGED (recovery failed)" \
-        "Mount $MOUNT_POINT is present but unresponsive; force-remount also failed."
+elif ! is_accessible 20; then
+    # One slow probe is not proof of a wedge: Google can stall a getattr for
+    # tens of seconds without the mount being dead. Confirm before tearing it
+    # down, so a busy mount is not force-unmounted for no reason.
+    log_warn "Mount probe timed out at $MOUNT_POINT; re-checking in 5s"
+    sleep 5
+    if ! is_accessible 20; then
+        attempt_recovery \
+            "MOUNT PRESENT but UNRESPONSIVE at $MOUNT_POINT" \
+            "fusermount -uz $MOUNT_POINT 2>/dev/null; systemctl restart $SERVICE_NAME" \
+        || notify_on_failure \
+            "rclone-gdrive mount WEDGED (recovery failed)" \
+            "Mount $MOUNT_POINT is present but unresponsive; force-remount also failed."
+    else
+        log_info "Mount healthy at $MOUNT_POINT (slow first probe)"
+        rm -f "$NOTIFY_FLAG"
+    fi
 
 else
     log_info "Mount healthy at $MOUNT_POINT"
