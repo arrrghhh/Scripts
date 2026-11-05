@@ -99,8 +99,15 @@ rclone delete gdrive:Backups/ubuntu_backup/Rolling/<node>/HA \
 
 ## Restoring
 
-An archive is a standard `.tgz` of `/home`, `/etc`, `/usr/local/bin`, and
-`/var/spool/cron`:
+An archive is a standard `.tgz` of `/home`, `/etc`, `/root`, `/usr/local/bin`,
+`/var/lib/samba`, and `/var/spool/cron`:
+
+> **Secrets:** archives now include `/root` (root's SSH private keys and the
+> rclone OAuth token) and `/var/lib/samba` (the Samba passdb and machine
+> secrets), in addition to the `/etc/shadow`, SSH host keys, and app `.env`
+> files that were already included. The local HDD, GDrive, and cross-backup
+> copies are **not encrypted** — protect those destinations accordingly.
+
 
 ```console
 tar -tzf backup.tgz | less          # inspect

@@ -67,10 +67,17 @@ NODES=(summitserver nas)
 
 # Directories to back up. The archive is created with `tar -C /`, so these
 # are the top-level path components stored in the archive.
+#
+# NOTE: /root and /var/lib/samba hold secrets (root's SSH keys + rclone OAuth
+# token, and the Samba passdb/secrets). The archive already contains
+# /etc/shadow, SSH host keys and app .env files, so this is the same class of
+# exposure — but every copy (local HDD, GDrive, cross-backups) is unencrypted.
 SOURCES=(
     "/home"
     "/etc"
+    "/root"
     "/usr/local/bin"
+    "/var/lib/samba"
     "/var/spool/cron"
 )
 
