@@ -1,0 +1,7 @@
+# /etc/cron.d/rclone-gdrive-monitor
+# Hourly health check + auto-recovery for the rclone Google Drive mount on nas.
+# Runs as root so it can restart rclone-gdrive.service without polkit prompts.
+# Source of truth: Scripts repo -> docker/systemd/rclone-gdrive-monitor.cron
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+0 * * * * root /usr/local/sbin/rclone-gdrive-monitor.sh
