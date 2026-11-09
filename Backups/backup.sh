@@ -185,11 +185,35 @@ trap cleanup EXIT
 rclone_copy() {
     local src="$1" dst="$2"
     shift 2
-    if rclone --config "$RCLONE_CONF" copy "$src" "$dst" --log-level ERROR "$@" >>"$LOG_FILE" 2>&1; then
-        log_msg "  -> OK: ${dst}"
-    else
-        record_failure "rclone copy failed: ${dst}"
-    fi
+    local retry_count=0
+    local max_retries=3
+    local backoff=5
+    
+    while true; do
+        local error_output
+        if error_output=$(rclone --config "$RCLONE_CONF" copy "$src" "$dst" --log-level ERROR --tpslimit 5 "$@" 2>&1); then
+            log_msg "  -> OK: ${dst}"
+            break
+        else
+            log_msg "  [rclone] copy attempt failed: ${dst}"
+            
+            # Check if this is a quota error
+            if echo "$error_output" | grep -q "Quota exceeded"; then
+                ((retry_count++))
+                if [ $retry_count -ge $max_retries ]; then
+                    record_failure "rclone copy failed after $max_retries retries due to quota exceeded"
+                    break
+                fi
+                log_msg "  [rclone] Quota exceeded - waiting $backoff seconds before retry $retry_count/$max_retries"
+                sleep $backoff
+                # Exponential backoff with jitter
+                backoff=$((backoff * 2 + RANDOM % 3))
+            else
+                record_failure "rclone copy failed: ${dst}"
+                break
+            fi
+        fi
+    done
 }
 
 # Prune a local directory: log then delete files matching pattern older than N days.
@@ -209,11 +233,11 @@ prune_local() {
 # depth against ever touching sibling/nested folders.
 prune_rclone() {
     local remote="$1" pattern="$2" age="$3"
-    local found=false f listing
+    local found=false f listing retry_count=0 max_retries=2 backoff=5
     # Skip tiers that don't exist yet (e.g. weekly/monthly outside their
     # promotion day, or an empty HA tier) — rclone delete would error out.
     if ! listing="$(rclone --config "$RCLONE_CONF" lsf "$remote" --files-only --max-depth 1 \
-                --include "$pattern" --min-age "$age" 2>/dev/null)"; then
+                --include "$pattern" --min-age "$age" --tpslimit 5 2>/dev/null)"; then
         log_msg "  (tier not found — skipping ${remote})"
         return 0
     fi
@@ -222,12 +246,29 @@ prune_rclone() {
         log_msg "  [prune] ${remote}/${f}"
         found=true
     done <<<"$listing"
-    if rclone --config "$RCLONE_CONF" delete "$remote" --max-depth 1 \
-            --include "$pattern" --min-age "$age" >>"$LOG_FILE" 2>&1; then
-        $found || log_msg "  (nothing to prune)"
-    else
-        record_failure "prune failed: ${remote}"
-    fi
+    while true; do
+        local error_output
+        if error_output=$(rclone --config "$RCLONE_CONF" delete "$remote" --max-depth 1 \
+                --include "$pattern" --min-age "$age" --tpslimit 5 2>&1); then
+            $found || log_msg "  (nothing to prune)"
+            break
+        else
+            log_msg "  [rclone] prune attempt failed: ${remote}"
+            if echo "$error_output" | grep -q "Quota exceeded"; then
+                ((retry_count++))
+                if [ $retry_count -ge $max_retries ]; then
+                    record_failure "prune failed after $max_retries retries due to quota exceeded"
+                    break
+                fi
+                log_msg "  [rclone] Quota exceeded - waiting $backoff seconds before prune retry $retry_count/$max_retries"
+                sleep $backoff
+                backoff=$((backoff * 2 + RANDOM % 3))
+            else
+                record_failure "prune failed: ${remote}"
+                break
+            fi
+        fi
+    done
 }
 
 # ---------------------------------------------------------------------------
@@ -298,20 +339,30 @@ fi
 
 log_msg "Uploading to GDrive daily (${GDRIVE_DAILY})..."
 rclone_copy "$ARCHIVE_SRC" "$GDRIVE_DAILY"
+log_msg "  [pausing 3s to avoid quota burst]"
+sleep 3
 
 if [ "$IS_WEEKLY" = "1" ]; then
     log_msg "Sunday — promoting to GDrive weekly (${GDRIVE_WEEKLY})..."
     rclone_copy "$ARCHIVE_SRC" "$GDRIVE_WEEKLY"
+    log_msg "  [pausing 3s to avoid quota burst]"
+    sleep 3
 fi
 
 if [ "$IS_MONTHLY" = "1" ]; then
     log_msg "1st of month — promoting to GDrive monthly (${GDRIVE_MONTHLY})..."
     rclone_copy "$ARCHIVE_SRC" "$GDRIVE_MONTHLY"
+    log_msg "  [pausing 3s to avoid quota burst]"
+    sleep 3
 fi
 
 log_msg "Pruning GDrive tiers..."
 prune_rclone "$GDRIVE_DAILY"   "${NODE}-backup-*.tgz" "$RET_DAILY"
+log_msg "  [pausing 3s to avoid quota burst]"
+sleep 3
 prune_rclone "$GDRIVE_WEEKLY"  "${NODE}-backup-*.tgz" "$RET_WEEKLY"
+log_msg "  [pausing 3s to avoid quota burst]"
+sleep 3
 prune_rclone "$GDRIVE_MONTHLY" "${NODE}-backup-*.tgz" "$RET_MONTHLY"
 
 log_msg "Pruning local HDD backups (>${RET_LOCAL}d)..."
@@ -339,15 +390,21 @@ fi
 if [ -d "$HA_BACKUP_DIR" ]; then
     log_msg "Syncing Home Assistant backups to GDrive..."
     rclone_copy "$HA_BACKUP_DIR" "$GDRIVE_HA_DAILY" --max-age 24h
+    log_msg "  [pausing 3s to avoid quota burst]"
+    sleep 3
 
     if [ "$IS_WEEKLY" = "1" ]; then
         log_msg "Sunday — HA backup to weekly (${GDRIVE_HA_WEEKLY})..."
         rclone_copy "$HA_BACKUP_DIR" "$GDRIVE_HA_WEEKLY" --max-age 24h
+        log_msg "  [pausing 3s to avoid quota burst]"
+        sleep 3
     fi
 
     if [ "$IS_MONTHLY" = "1" ]; then
         log_msg "1st of month — HA backup to monthly (${GDRIVE_HA_MONTHLY})..."
         rclone_copy "$HA_BACKUP_DIR" "$GDRIVE_HA_MONTHLY" --max-age 24h
+        log_msg "  [pausing 3s to avoid quota burst]"
+        sleep 3
     fi
 
     log_msg "Pruning GDrive HA tiers..."
