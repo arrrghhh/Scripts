@@ -103,8 +103,10 @@ EXCLUDE_PATTERNS=(
     ".sabnzbd/*/logs"                       # SABnzbd nested logs
     ".sonarr/logs"                          # Sonarr runtime logs
     ".sonarr/logs.db"                       # Sonarr log database
+    ".sonarr/MediaCover"                    # Sonarr artwork cache (regeneratable)
     ".radarr/logs"                          # Radarr runtime logs
     ".radarr/logs.db"                       # Radarr log database
+    ".radarr/MediaCover"                    # Radarr artwork cache (regeneratable)
     ".prowlarr/logs"                        # Prowlarr runtime logs
     ".prowlarr/logs.db"                     # Prowlarr log database
     ".nginxproxmgr/logs"                    # Nginx Proxy Manager logs

@@ -10,31 +10,51 @@ local HDD, in Google Drive (rclone GFS), and pushed to the other servers.
 |------------------|------------------------------------------------------|
 | `backup.sh`      | The backup script (single self-contained file).      |
 | `backup.service` | systemd oneshot unit.                                |
-| `backup.timer`   | systemd timer — fires daily at 02:30 local.          |
+| `backup.timer`   | systemd timer — daily, per-node `OnCalendar=` override. |
 
 ## Deploying on a server
 
-The same `backup.sh` runs unchanged on all three servers; per-server identity
-comes from `hostname`. The weekly/monthly promotion is decided inside the
-script, so the timer only needs to fire once per day.
+The same `backup.sh` runs unchanged on all servers; per-server identity comes
+from `hostname`. The weekly/monthly promotion is decided inside the script, so
+the timer only needs to fire once per day.
+
+**Deployment is via git, not file copies.** The servers run the script straight
+out of the shared checkout at `/home/arrrghhh/Scripts`, and
+`docker-conf-sync@<endpoint>.timer` (every 10 min) fetches and fast-forwards
+that checkout:
 
 ```console
-# 1. Install the script
-sudo install -m 0755 -o root -g root backup.sh /usr/local/sbin/backup.sh
+# On your workstation: edit, commit, push
+git commit -am "Backups: ..."
+git push origin main
 
-# 2. Install the timer
-sudo install -m 0644 backup.service backup.timer /etc/systemd/system/
-sudo systemctl daemon-reload
-sudo systemctl enable --now backup.timer
+# Servers fast-forward automatically; to force it now:
+sudo systemctl start docker-conf-sync@Lakewood.service    # or @SummitHouse / @usrv
+```
 
-# 3. Check status / run manually
+The systemd unit must point at the checkout, not a copy:
+
+```console
+# /etc/systemd/system/backup.service
+ExecStart=/bin/bash /home/arrrghhh/Scripts/Backups/backup.sh
+```
+
+Do **not** `scp` or `install` the script over the checkout — a modified
+working tree blocks `git merge --ff-only`, so the sync timer fails until the
+tree is clean. Only if a server is not using the repo does a standalone
+install make sense (drop a copy at e.g. `/usr/local/sbin/backup.sh` and point
+`ExecStart=` there).
+
+```console
+# Check status / run manually
 systemctl status backup.timer
-sudo /usr/local/sbin/backup.sh          # manual run (honours the lock)
+sudo systemctl start backup.service     # manual run (honours the lock)
 journalctl -u backup.service            # or read the per-day log in /var/log/backup_logs/
 ```
 
-Edit `OnCalendar=` in `backup.timer` to change the time. `Persistent=true`
-runs the backup after a missed schedule (e.g. machine off overnight).
+Edit `OnCalendar=` in `backup.timer` (or a drop-in) to change the time.
+`Persistent=true` runs the backup after a missed schedule (e.g. machine off
+overnight).
 
 ## Per-server prerequisites
 
@@ -59,7 +79,7 @@ Everything lives in the CONFIG section at the top of `backup.sh`:
 | `PRIMARY_BASE`     | `/media/backup/…`| Local HDD root; per-node subfolder.     |
 | `SOURCES`          | `/home /etc …`   | Directories to archive.                 |
 | `EXCLUDE_PATTERNS` | (list)           | Single source of truth for tar + rsync. |
-| `NODES`            | `summitserver nas usrv` | Cross-backup targets (skips self). |
+| `NODES`            | `summitserver nas` | Cross-backup targets (skips self).    |
 | `ALERT_TO`         | empty            | Email for failure alerts.               |
 | `RET_DAILY`        | `7d`             | GDrive daily retention.                 |
 | `RET_WEEKLY`       | `28d`            | GDrive weekly retention.                |
