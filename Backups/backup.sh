@@ -104,11 +104,22 @@ EXCLUDE_PATTERNS=(
     ".sonarr/logs"                          # Sonarr runtime logs
     ".sonarr/logs.db"                       # Sonarr log database
     ".sonarr/MediaCover"                    # Sonarr artwork cache (regeneratable)
+    ".sonarr/Backups"                       # Sonarr's own DB snapshots (DB already backed up)
     ".radarr/logs"                          # Radarr runtime logs
     ".radarr/logs.db"                       # Radarr log database
     ".radarr/MediaCover"                    # Radarr artwork cache (regeneratable)
+    ".radarr/Backups"                       # Radarr's own DB snapshots (DB already backed up)
     ".prowlarr/logs"                        # Prowlarr runtime logs
     ".prowlarr/logs.db"                     # Prowlarr log database
+    ".prowlarr/Backups"                     # Prowlarr's own DB snapshots (DB already backed up)
+    "Multi-Report/*.pdf"                    # Upstream docs, tracked in the project's git
+    "Multi-Report/*.docx"                   # Upstream docs, tracked in the project's git
+    "Multi-Report/*.pptx"                   # Upstream docs, tracked in the project's git
+    "Multi-Report/*.PNG"                    # Upstream screenshot, tracked in the project's git
+    "Multi-Report-fork/*.pdf"               # Upstream docs, tracked in the project's git
+    "Multi-Report-fork/*.tar.gz"            # Upstream bundled binaries, tracked in its git
+    "Multi_Report_User_Guide.pdf"           # Stray copy of upstream doc
+    "Multi_Report_Quick_Start_Guide.pdf"    # Stray copy of upstream doc
     ".nginxproxmgr/logs"                    # Nginx Proxy Manager logs
     ".nginxproxmgr.pre-migrate-20261029"    # Stale NPM pre-migration copy
     ".cache"                                # General app caches
