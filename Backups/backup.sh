@@ -91,12 +91,24 @@ EXCLUDE_PATTERNS=(
     ".medusa/cache*"                        # Medusa cache/WAL files
     ".deluge/config/supervisord.log*"       # Deluge log rotation
     ".deluge/supervisord.log*"              # Deluge log rotation
+    ".deluge/config/deluged.log*"           # Deluge daemon logs
+    ".deluge/config/deluge-web.log*"        # Deluge web UI logs
+    ".deluge/config/plugin_cache"           # Deluge extracted plugin cache
     ".git"                                  # Large .git objects
     "pihole-FTL.db"                         # Large Pi-hole database
+    "listsCache"                            # Pi-hole blocklist cache (regeneratable)
+    "gravity_backups"                       # Pi-hole gravity DB backups (regeneratable)
     ".sabnzbd/Downloads"                    # Active download data
     ".sabnzbd/logs"                         # SABnzbd log history
     ".sabnzbd/*/logs"                       # SABnzbd nested logs
+    ".sonarr/logs"                          # Sonarr runtime logs
+    ".sonarr/logs.db"                       # Sonarr log database
+    ".radarr/logs"                          # Radarr runtime logs
+    ".radarr/logs.db"                       # Radarr log database
+    ".prowlarr/logs"                        # Prowlarr runtime logs
+    ".prowlarr/logs.db"                     # Prowlarr log database
     ".nginxproxmgr/logs"                    # Nginx Proxy Manager logs
+    ".nginxproxmgr.pre-migrate-20261029"    # Stale NPM pre-migration copy
     ".cache"                                # General app caches
     ".vscode-server"                        # VS Code binaries/extensions
     "Dropbox"                               # Cloud-synced data
@@ -104,6 +116,9 @@ EXCLUDE_PATTERNS=(
     ".scrypted"                             # NVR/camera caches
     ".frigate/model_cache"                  # Frigate AI model caches
     ".frigate/logs"                         # Frigate runtime log history
+    "dns_monitor.log"                       # Ad-hoc DNS monitor log
+    "dns_verbose.log"                       # Ad-hoc DNS verbose log
+    "gateway_monitor.log"                   # Ad-hoc gateway monitor log
     "*.db-wal"                              # SQLite WAL files
     "*.db-shm"                              # SQLite shared memory files
     "*.js.map"                              # JS source maps
