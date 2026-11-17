@@ -41,6 +41,10 @@ CROSS_PATH="${PRIMARY_BASE}/cross_backups"
 
 HA_BACKUP_DIR="/home/${LOG_RUN_USER}/.homeassistant/backups"
 
+# Main archive compression: gzip (.tgz) | xz (.txz) | zstd (.tzst).
+# xz is the default: same data as gzip but ~22 MB instead of ~37 MB.
+COMPRESS="xz"
+
 # GFS tiers — SIBLINGS under one node folder. Do not nest these.
 GDRIVE_ROOT="${RCLONE_REMOTE}:Backups/ubuntu_backup/Rolling/${NODE}"
 GDRIVE_DAILY="${GDRIVE_ROOT}/daily"
@@ -149,9 +153,33 @@ IS_MONTHLY=0
 [ "$DOW" = "7" ]  && IS_WEEKLY=1
 [ "$DOM" = "01" ] && IS_MONTHLY=1
 
-ARCHIVE="${NODE}-backup-${DATE}.tgz"
-ARCHIVE_TGZ="${LOCAL_TEMP}/${ARCHIVE}"
-ARCHIVE_SRC="${ARCHIVE_TGZ}"
+case "$COMPRESS" in
+    gzip) ARCHIVE_EXT="tgz"  ; TAR_COMPRESS=(-z) ;;
+    xz)   ARCHIVE_EXT="txz"  ; TAR_COMPRESS=(--use-compress-program="xz -6 -T0") ;;
+    zstd) ARCHIVE_EXT="tzst" ; TAR_COMPRESS=(--use-compress-program="zstd -19 -T0") ;;
+    *) echo "FATAL: unknown COMPRESS=${COMPRESS} (expected gzip, xz or zstd)" >&2; exit 1 ;;
+esac
+
+case "$COMPRESS" in
+    gzip) COMPRESS_BIN=gzip ;;
+    xz)   COMPRESS_BIN=xz ;;
+    zstd) COMPRESS_BIN=zstd ;;
+esac
+command -v "$COMPRESS_BIN" >/dev/null 2>&1 || {
+    echo "FATAL: COMPRESS=${COMPRESS} requires '${COMPRESS_BIN}' (not found)" >&2
+    exit 1
+}
+
+# Prune every format we have ever written, so switching COMPRESS can never
+# strand old archives in a tier (or in a cross-backup folder).
+ARCHIVE_PATTERNS=(
+    "${NODE}-backup-*.tgz" "${NODE}-backup-*.txz" "${NODE}-backup-*.tzst"
+)
+CROSS_PATTERNS=("*.tgz" "*.txz" "*.tzst")
+
+ARCHIVE="${NODE}-backup-${DATE}.${ARCHIVE_EXT}"
+ARCHIVE_FILE="${LOCAL_TEMP}/${ARCHIVE}"
+ARCHIVE_SRC="${ARCHIVE_FILE}"
 
 LOG_FILE="${LOG_DIR}/backup_${NODE}_${DATE}.log"
 FAILED=0
@@ -207,7 +235,7 @@ Log: ${LOG_FILE}"
     exit 1
 }
 
-cleanup() { rm -f "$ARCHIVE_TGZ"; }
+cleanup() { rm -f "$ARCHIVE_FILE"; }
 trap cleanup EXIT
 
 rclone_copy() {
@@ -335,19 +363,20 @@ for dir in "${SOURCES[@]}"; do
 done
 
 # --- Create archive ---------------------------------------------------------
-log_msg "Creating archive: ${ARCHIVE_TGZ}"
+log_msg "Creating archive: ${ARCHIVE_FILE}"
 tar --warning=no-file-changed --ignore-failed-read \
     "${EXCLUDES[@]}" \
+    "${TAR_COMPRESS[@]}" \
     --checkpoint=5000 \
     --checkpoint-action='echo=  ... compressed %u blocks' \
-    -czf "$ARCHIVE_TGZ" -C / "${BACKUP_DIRS[@]}" >>"$LOG_FILE" 2>&1
+    -cf "$ARCHIVE_FILE" -C / "${BACKUP_DIRS[@]}" >>"$LOG_FILE" 2>&1
 TAR_EXIT=$?
 if [ "$TAR_EXIT" -gt 1 ]; then
     die "tar exited with code ${TAR_EXIT}"
 fi
 
 log_msg "Verifying archive integrity..."
-if ! tar -tzf "$ARCHIVE_TGZ" >/dev/null 2>&1; then
+if ! tar "${TAR_COMPRESS[@]}" -tf "$ARCHIVE_FILE" >/dev/null 2>&1; then
     die "integrity check failed for ${ARCHIVE}"
 fi
 log_msg "Integrity check passed."
@@ -356,7 +385,7 @@ log_msg "Integrity check passed."
 if [ -d "$PRIMARY_BASE" ]; then
     log_msg "Moving archive to HDD..."
     mkdir -p "$PRIMARY_HDD"
-    if rsync -ah --remove-source-files "$ARCHIVE_TGZ" "${PRIMARY_HDD}/" >>"$LOG_FILE" 2>&1; then
+    if rsync -ah --remove-source-files "$ARCHIVE_FILE" "${PRIMARY_HDD}/" >>"$LOG_FILE" 2>&1; then
         ARCHIVE_SRC="${PRIMARY_HDD}/${ARCHIVE}"
     else
         record_failure "could not move archive to HDD — continuing from temp"
@@ -385,16 +414,24 @@ if [ "$IS_MONTHLY" = "1" ]; then
 fi
 
 log_msg "Pruning GDrive tiers..."
-prune_rclone "$GDRIVE_DAILY"   "${NODE}-backup-*.tgz" "$RET_DAILY"
+for pattern in "${ARCHIVE_PATTERNS[@]}"; do
+    prune_rclone "$GDRIVE_DAILY" "$pattern" "$RET_DAILY"
+done
 log_msg "  [pausing 3s to avoid quota burst]"
 sleep 3
-prune_rclone "$GDRIVE_WEEKLY"  "${NODE}-backup-*.tgz" "$RET_WEEKLY"
+for pattern in "${ARCHIVE_PATTERNS[@]}"; do
+    prune_rclone "$GDRIVE_WEEKLY" "$pattern" "$RET_WEEKLY"
+done
 log_msg "  [pausing 3s to avoid quota burst]"
 sleep 3
-prune_rclone "$GDRIVE_MONTHLY" "${NODE}-backup-*.tgz" "$RET_MONTHLY"
+for pattern in "${ARCHIVE_PATTERNS[@]}"; do
+    prune_rclone "$GDRIVE_MONTHLY" "$pattern" "$RET_MONTHLY"
+done
 
 log_msg "Pruning local HDD backups (>${RET_LOCAL}d)..."
-prune_local "$PRIMARY_HDD" "${NODE}-backup-*.tgz" "$RET_LOCAL"
+for pattern in "${ARCHIVE_PATTERNS[@]}"; do
+    prune_local "$PRIMARY_HDD" "$pattern" "$RET_LOCAL"
+done
 
 # --- Cross-node push ---------------------------------------------------------
 for TARGET in "${NODES[@]}"; do
@@ -411,7 +448,9 @@ done
 # --- Incoming cross-backup pruning ------------------------------------------
 if [ -d "$CROSS_PATH" ]; then
     log_msg "Pruning incoming cross-backups (>${RET_CROSS}d)..."
-    prune_local "$CROSS_PATH" "*.tgz" "$RET_CROSS"
+    for pattern in "${CROSS_PATTERNS[@]}"; do
+        prune_local "$CROSS_PATH" "$pattern" "$RET_CROSS"
+    done
 fi
 
 # --- Home Assistant backups ---------------------------------------------------

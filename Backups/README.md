@@ -1,8 +1,9 @@
 # Backups — Ubuntu server multi-tier backup
 
-`backup.sh` creates a daily tar.gz of configured sources and rotates it across
-three tiers: **Daily x7 | Weekly x4 (Sunday) | Monthly x12 (1st)**, stored on a
-local HDD, in Google Drive (rclone GFS), and pushed to the other servers.
+`backup.sh` creates a daily compressed tar archive of configured sources and
+rotates it across three tiers: **Daily x7 | Weekly x4 (Sunday) | Monthly x12
+(1st)**, stored on a local HDD, in Google Drive (rclone GFS), and pushed to the
+other servers. By default the archive is `.txz` (xz); see `COMPRESS` below.
 
 ## Files
 
@@ -68,6 +69,7 @@ All are assumed to exist already; the script does not set them up:
 - SSH aliases for the other two nodes in `/root/.ssh/config`, with
   passwordless `root` access, so cross-backups can be pushed.
 - `mail` or `sendmail` if you want failure alerts (`ALERT_TO` set).
+- The decompressor for `COMPRESS` (`xz` by default; `gzip` or `zstd` if changed).
 
 ## Configuration
 
@@ -78,6 +80,7 @@ Everything lives in the CONFIG section at the top of `backup.sh`:
 | `LOG_RUN_USER`     | `arrrghhh`       | Owner of log and HA paths.              |
 | `PRIMARY_BASE`     | `/media/backup/…`| Local HDD root; per-node subfolder.     |
 | `SOURCES`          | `/home /etc …`   | Directories to archive.                 |
+| `COMPRESS`         | `xz`             | `xz` (`.txz`), `gzip` (`.tgz`), `zstd` (`.tzst`). |
 | `EXCLUDE_PATTERNS` | (list)           | Single source of truth for tar + rsync. |
 | `NODES`            | `summitserver nas` | Cross-backup targets (skips self).    |
 | `ALERT_TO`         | empty            | Email for failure alerts.               |
@@ -119,8 +122,10 @@ rclone delete gdrive:Backups/ubuntu_backup/Rolling/<node>/HA \
 
 ## Restoring
 
-An archive is a standard `.tgz` of `/home`, `/etc`, `/root`, `/usr/local/bin`,
-`/var/lib/samba`, and `/var/spool/cron`:
+An archive is a standard tar of `/home`, `/etc`, `/root`, `/usr/local/bin`,
+`/var/lib/samba`, and `/var/spool/cron`, compressed according to `COMPRESS`.
+Old `.tgz` archives from before the xz switch remain restorable and are pruned
+by the normal retention rules — the script prunes all three extensions.
 
 > **Secrets:** archives now include `/root` (root's SSH private keys and the
 > rclone OAuth token) and `/var/lib/samba` (the Samba passdb and machine
@@ -130,8 +135,17 @@ An archive is a standard `.tgz` of `/home`, `/etc`, `/root`, `/usr/local/bin`,
 
 
 ```console
-tar -tzf backup.tgz | less          # inspect
-tar -xzf backup.tgz -C /            # extract (paths relative to root)
+# xz (default)
+tar -tJf backup.txz | less          # inspect
+tar -xJf backup.txz -C /            # extract (paths relative to root)
+
+# gzip (legacy archives)
+tar -tzf backup.tgz | less
+tar -xzf backup.tgz -C /
+
+# zstd
+tar --use-compress-program=zstd -tf backup.tzst | less
+tar --use-compress-program=zstd -xf backup.tzst -C /
 ```
 
 Recovery copies live in three places: the local HDD (7d), GDrive tiers, and
