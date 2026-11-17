@@ -88,6 +88,15 @@ Everything lives in the CONFIG section at the top of `backup.sh`:
 | `RET_WEEKLY`       | `28d`            | GDrive weekly retention.                |
 | `RET_MONTHLY`      | `365d`           | GDrive monthly retention (~12 copies).  |
 
+## Logs
+
+Each run writes to `/var/log/backup_logs/backup_<node>.log` (the current log).
+At the start of the next run that file is rotated to
+`backup_<node>_<date>.log`, using the file's own modification date. Multiple
+runs on the same day append to that day's file. On the 1st, dated logs from
+the previous month are rolled into `archives/backup_logs_<month>.tgz` and a
+month old or older log archives are removed after 365 days.
+
 ## GDrive layout
 
 Tiers are **siblings** — this is deliberate and must stay that way. `rclone

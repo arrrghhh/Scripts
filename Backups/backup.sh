@@ -181,7 +181,10 @@ ARCHIVE="${NODE}-backup-${DATE}.${ARCHIVE_EXT}"
 ARCHIVE_FILE="${LOCAL_TEMP}/${ARCHIVE}"
 ARCHIVE_SRC="${ARCHIVE_FILE}"
 
-LOG_FILE="${LOG_DIR}/backup_${NODE}_${DATE}.log"
+# The active log has a stable name; each run rotates the previous log to a
+# dated filename before appending to it, so history survives for the monthly
+# log archive.
+LOG_FILE="${LOG_DIR}/backup_${NODE}.log"
 FAILED=0
 
 mkdir -p "$LOCAL_TEMP" "$LOG_DIR" /tmp/fake
@@ -193,6 +196,22 @@ exec 9>"$LOCK_FILE"
 if ! flock -n 9; then
     echo "$(date +'%Y-%m-%d %H:%M:%S') - ERROR: another backup is running (${LOCK_FILE})." | tee -a "$LOG_FILE"
     exit 1
+fi
+
+# --- Rotate the previous current log ----------------------------------------
+# Uses the log's own mtime, so a run that spans midnight still files the log
+# under the day it was written. Multiple runs in one day append to the same
+# dated file rather than overwriting it.
+if [ -s "$LOG_FILE" ]; then
+    LOG_DAY="$(date -d "@$(stat -c %Y "$LOG_FILE")" +%Y-%m-%d)"
+    DATED_LOG="${LOG_DIR}/backup_${NODE}_${LOG_DAY}.log"
+    if [ -e "$DATED_LOG" ]; then
+        printf '\n' >>"$DATED_LOG"
+        cat "$LOG_FILE" >>"$DATED_LOG"
+        rm -f "$LOG_FILE"
+    else
+        mv "$LOG_FILE" "$DATED_LOG"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
