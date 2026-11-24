@@ -110,10 +110,12 @@ root-owned, breaking normal git use in the checkout.
 ## How a change propagates
 
 1. `docker-conf-sync@<Endpoint>.timer` fires every 10 minutes.
-2. `conf-sync.sh` fetches `origin/main`, renders the **candidate** compose against
-   the live `.env`, and runs `docker compose config -q`, plus `bash -n` on
+2. `conf-sync.sh` fetches `origin/main` (retrying transient failures with
+   exponential backoff), renders the **candidate** compose against the live
+   `.env`, and runs `docker compose config -q`, plus `bash -n` on
    `docker/dockerupdate.sh` and `Backups/backup.sh`.
-3. Only if all pass does it `git merge --ff-only origin/main`.
+3. Only if all pass does it `git merge --ff-only origin/main`. Alert delivery
+   failures are retried the same way.
 
 A broken commit is rejected, the previous files stay live, and the unit fails
 visibly. Files are updated within 10 minutes; containers pick them up at the next

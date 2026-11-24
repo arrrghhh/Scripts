@@ -18,10 +18,38 @@ export GIT_TERMINAL_PROMPT=0
 
 log() { echo "[$(date -u +%FT%TZ)] $*"; }
 
+# Retry transient network failures (git fetch, alert delivery) with exponential
+# backoff and a little jitter. Worst-case delay stays well under the unit's
+# TimeoutStartSec=180.
+ATTEMPTS=4
+BASE_SLEEP=5
+
+retry() {
+  local label="$1"
+  shift
+  local attempt=1
+  local delay=$BASE_SLEEP
+  while :; do
+    if "$@"; then
+      return 0
+    else
+      local rc=$?
+    fi
+    if [ "$attempt" -ge "$ATTEMPTS" ]; then
+      return "$rc"
+    fi
+    local wait=$((delay + RANDOM % 3))
+    log "$label failed (exit $rc); retry ${attempt}/$((ATTEMPTS - 1)) in ${wait}s"
+    sleep "$wait"
+    delay=$((delay * 2))
+    attempt=$((attempt + 1))
+  done
+}
+
 notify_fail() {
   local subject="$1"
   local body="$2"
-  /bin/bash "$BASE/notify.sh" "$ENDPOINT" "$subject" "$body" || true
+  retry "notify $subject" /bin/bash "$BASE/notify.sh" "$ENDPOINT" "$subject" "$body" || true
 }
 
 on_error() {
@@ -36,7 +64,7 @@ trap 'on_error $LINENO' ERR
 exec 9>"$LOCK"
 flock -n 9 || { log "another sync is already running"; exit 0; }
 
-git -C "$REPO" fetch --quiet origin main
+retry "git fetch origin main" git -C "$REPO" fetch --quiet origin main
 
 if [ "$(git -C "$REPO" rev-parse HEAD)" = "$(git -C "$REPO" rev-parse origin/main)" ]; then
   log "already at $(git -C "$REPO" rev-parse --short HEAD)"
