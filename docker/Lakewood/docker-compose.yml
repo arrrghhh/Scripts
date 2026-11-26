@@ -31,7 +31,6 @@ services:
       - VPN_INPUT_PORTS=
       - VPN_OUTPUT_PORTS=8112,58846
       - DEBUG=false
-      - ENABLE_STARTUP_SCRIPTS=yes
       - UMASK=000
       - PUID=1000
       - PGID=1000
