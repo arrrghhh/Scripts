@@ -7,7 +7,7 @@
 #            Documents/Source are skipped automatically (they live on GitHub).
 #   Destinations:
 #     NAS   rsync over SSH -> Workstation/<hostname>/daily  (7 dailies)
-#     Drive rclone crypt  -> daily x7 / weekly x4 / monthly x12
+#     Drive gdrive        -> daily x7 / weekly x4 / monthly x12
 #
 # The archive is stored outside $HOME so it cannot back itself up.
 # =============================================================================
@@ -26,7 +26,8 @@ NAS_DEST="/media/backup/Backups/Workstation/${NODE}/daily"
 NAS_RETENTION_DAYS=7
 
 RCLONE_CONF="${HOME_DIR}/.config/rclone/rclone.conf"
-GDRIVE_REMOTE="gdrive-laptop-crypt-readable"
+GDRIVE_REMOTE="gdrive"
+GDRIVE_ROOT="${GDRIVE_REMOTE}:Backups/Laptop/${NODE}"
 RET_DAILY="7d"
 RET_WEEKLY="28d"
 RET_MONTHLY="365d"
@@ -136,14 +137,14 @@ if ! ssh "$NAS_HOST" "find '${NAS_DEST}' -maxdepth 1 -type f -name '${NODE}-conf
 fi
 log "NAS upload OK"
 
-# --- Google Drive (encrypted) -------------------------------------------------
+# --- Google Drive -------------------------------------------------------------
 for tier in daily weekly monthly; do
-    rclone --config "$RCLONE_CONF" mkdir "${GDRIVE_REMOTE}:${tier}" >>"$LOG_FILE" 2>&1 \
+    rclone --config "$RCLONE_CONF" mkdir "${GDRIVE_ROOT}/${tier}" >>"$LOG_FILE" 2>&1 \
         || die "could not create GDrive tier ${tier}"
 done
 
-log "Uploading to ${GDRIVE_REMOTE}:daily/"
-rclone --config "$RCLONE_CONF" copy "$ARCHIVE_FILE" "${GDRIVE_REMOTE}:daily" \
+log "Uploading to ${GDRIVE_ROOT}/daily/"
+rclone --config "$RCLONE_CONF" copy "$ARCHIVE_FILE" "${GDRIVE_ROOT}/daily" \
     --log-level ERROR --tpslimit 5 >>"$LOG_FILE" 2>&1 \
     || die "rclone copy to daily failed"
 
@@ -151,13 +152,13 @@ DOW="$(date +%u)"
 DOM="$(date +%d)"
 if [ "$DOW" = "7" ]; then
     log "Sunday — promoting to weekly"
-    rclone --config "$RCLONE_CONF" copy "$ARCHIVE_FILE" "${GDRIVE_REMOTE}:weekly" \
+    rclone --config "$RCLONE_CONF" copy "$ARCHIVE_FILE" "${GDRIVE_ROOT}/weekly" \
         --log-level ERROR --tpslimit 5 >>"$LOG_FILE" 2>&1 \
         || die "rclone copy to weekly failed"
 fi
 if [ "$DOM" = "01" ]; then
     log "1st of month — promoting to monthly"
-    rclone --config "$RCLONE_CONF" copy "$ARCHIVE_FILE" "${GDRIVE_REMOTE}:monthly" \
+    rclone --config "$RCLONE_CONF" copy "$ARCHIVE_FILE" "${GDRIVE_ROOT}/monthly" \
         --log-level ERROR --tpslimit 5 >>"$LOG_FILE" 2>&1 \
         || die "rclone copy to monthly failed"
 fi
@@ -165,7 +166,7 @@ fi
 for tier_age in "daily:${RET_DAILY}" "weekly:${RET_WEEKLY}" "monthly:${RET_MONTHLY}"; do
     tier="${tier_age%%:*}"
     age="${tier_age##*:}"
-    rclone --config "$RCLONE_CONF" delete "${GDRIVE_REMOTE}:${tier}" \
+    rclone --config "$RCLONE_CONF" delete "${GDRIVE_ROOT}/${tier}" \
         --max-depth 1 --include "${NODE}-config-*.txz" --min-age "$age" --tpslimit 5 \
         >>"$LOG_FILE" 2>&1 || log "WARNING: GDrive prune failed for ${tier}"
 done
