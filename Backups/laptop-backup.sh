@@ -26,7 +26,7 @@ NAS_DEST="/media/backup/Backups/Workstation/${NODE}/daily"
 NAS_RETENTION_DAYS=7
 
 RCLONE_CONF="${HOME_DIR}/.config/rclone/rclone.conf"
-GDRIVE_REMOTE="gdrive-laptop-crypt"
+GDRIVE_REMOTE="gdrive-laptop-crypt-readable"
 RET_DAILY="7d"
 RET_WEEKLY="28d"
 RET_MONTHLY="365d"
