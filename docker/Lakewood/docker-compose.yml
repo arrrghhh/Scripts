@@ -8,6 +8,9 @@ services:
       - /dev/net/tun
     cap_add:
       - NET_ADMIN
+    privileged: true
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
     volumes:
       - /media/complete:/data
       - /home/arrrghhh/.deluge/config:/config
@@ -17,7 +20,7 @@ services:
       - VPN_USER=${VPN_USER:?VPN_USER missing from .env}
       - VPN_PASS=${VPN_PASS:?VPN_PASS missing from .env}
       - VPN_PROV=pia
-      - VPN_CLIENT=openvpn
+      - VPN_CLIENT=wireguard
       - STRICT_PORT_FORWARD=yes
       - ENABLE_PRIVOXY=no
       - LAN_NETWORK=192.168.0.0/24,181.41.206.0/24,37.19.210.0/24
