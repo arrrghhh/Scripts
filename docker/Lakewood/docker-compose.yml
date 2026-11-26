@@ -188,3 +188,16 @@ services:
     ports:
       - 9696:9696
     restart: unless-stopped
+
+  pulsarr:
+    image: lakker/pulsarr:latest
+    container_name: pulsarr
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - baseUrl=http://192.168.0.99
+    volumes:
+      - /home/arrrghhh/.pulsarr:/app/data
+    ports:
+      - 3003:3003
+    restart: unless-stopped
